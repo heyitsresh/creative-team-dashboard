@@ -7,7 +7,7 @@ const PROJECT_KEYS = (process.env.JIRA_PROJECT_KEYS || "CREATE")
   .map((s) => s.trim())
   .filter(Boolean);
 
-function authHeader() {
+export function authHeader() {
   const email = process.env.JIRA_EMAIL;
   const token = process.env.JIRA_API_TOKEN;
   if (!email || !token) {
@@ -80,8 +80,16 @@ function normalize(issue: JiraApiIssue): NormalizedTask {
     issueType: f.issuetype.name,
     assigneeName: f.assignee?.displayName ?? null,
     assigneeEmail: f.assignee?.emailAddress ?? null,
-    assigneeAvatarUrl:
-      f.assignee?.avatarUrls?.["48x48"] || f.assignee?.avatarUrls?.["32x32"] || null,
+    // Jira's own avatar endpoints (its default generated avatars, as opposed
+    // to a custom-uploaded photo on Atlassian's public CDN) require the same
+    // auth as the rest of the API — a bare <img src> from the browser gets a
+    // 403. Routing through our own /api/jira/avatar proxy (which attaches
+    // the server-side Jira credentials) fixes that for everyone, not just
+    // people with a custom photo.
+    assigneeAvatarUrl: (() => {
+      const raw = f.assignee?.avatarUrls?.["48x48"] || f.assignee?.avatarUrls?.["32x32"];
+      return raw ? `/api/jira/avatar?url=${encodeURIComponent(raw)}` : null;
+    })(),
     client,
     labels: f.labels || [],
     contentType: f.labels?.[0] || "Uncategorized",

@@ -1,38 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import type { NormalizedTask, SlaRule, TeamMember } from "@/types";
 import { isBreached } from "@/lib/metrics";
 import { Avatar } from "@/components/ui/Avatar";
-import { Pill } from "@/components/ui/Card";
+import { TaskTable } from "@/components/shared/TaskTable";
 
 function matches(member: TeamMember, task: NormalizedTask) {
   if (!member.jira_email || !task.assigneeEmail) return false;
   return member.jira_email.toLowerCase() === task.assigneeEmail.toLowerCase();
-}
-
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-const DOT_PALETTE = ["#6C5CE7", "#E0529C", "#F5A623", "#1FAA59", "#3D7BFD", "#B983FF"];
-
-const PRIORITY_COLOR: Record<string, string> = {
-  highest: "#E0529C",
-  high: "#E0529C",
-  medium: "#F5A623",
-  low: "#1FAA59",
-  lowest: "#1FAA59",
-};
-
-function hashColor(key: string) {
-  let hash = 0;
-  for (let i = 0; i < key.length; i++) hash = key.charCodeAt(i) + ((hash << 5) - hash);
-  return DOT_PALETTE[Math.abs(hash) % DOT_PALETTE.length];
 }
 
 /**
@@ -73,16 +47,6 @@ export function AssigneeQueue({
   }, [perMember, selectedId]);
 
   const selected = perMember.find((p) => p.member.id === selectedId);
-
-  const rows = useMemo(() => {
-    if (!selected) return [];
-    return [...selected.tasks].sort((a, b) => {
-      const aOver = isBreached(a, rules) ? 1 : 0;
-      const bOver = isBreached(b, rules) ? 1 : 0;
-      if (aOver !== bOver) return bOver - aOver;
-      return b.hoursInQueue - a.hoursInQueue;
-    });
-  }, [selected, rules]);
 
   if (members.length === 0) {
     return (
@@ -138,7 +102,7 @@ export function AssigneeQueue({
         <>
           <p className="text-sm text-muted mb-3">
             <span className="font-semibold text-ink">{selected.member.name}</span> ·{" "}
-            {rows.length} open task{rows.length === 1 ? "" : "s"}
+            {selected.tasks.length} open task{selected.tasks.length === 1 ? "" : "s"}
             {selected.overdueCount > 0 && (
               <span className="text-tag-pink-text font-medium">
                 {" "}
@@ -146,108 +110,7 @@ export function AssigneeQueue({
               </span>
             )}
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left border-b border-line label-caps font-normal">
-                  <th className="py-2 pr-3">Task</th>
-                  <th className="py-2 px-3">Status</th>
-                  <th className="py-2 px-3">Priority</th>
-                  <th className="py-2 px-3">Client</th>
-                  <th className="py-2 px-3">Content type</th>
-                  <th className="py-2 px-3 text-right">Days running</th>
-                  <th className="py-2 px-3">Due date</th>
-                  <th className="py-2 px-3">Project</th>
-                  <th className="py-2 pl-3">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((t) => {
-                  const overdue = isBreached(t, rules);
-                  const days = Math.floor(t.hoursInQueue / 24);
-                  return (
-                    <tr
-                      key={t.key}
-                      className="border-b border-line/60 hover:bg-paper/60 transition-colors"
-                    >
-                      <td className="py-2.5 pr-3">
-                        <a
-                          href={t.webUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary font-medium"
-                        >
-                          {t.key}
-                        </a>
-                        <p className="text-xs text-muted truncate max-w-xs">{t.summary}</p>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="inline-flex items-center gap-1.5 text-ink/80 whitespace-nowrap">
-                          <span
-                            className="h-2 w-2 rounded-full shrink-0"
-                            style={{ backgroundColor: hashColor(t.status) }}
-                          />
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        {t.priority ? (
-                          <span className="inline-flex items-center gap-1.5 text-ink/80 whitespace-nowrap">
-                            <span
-                              className="h-2 w-2 rounded-full shrink-0"
-                              style={{
-                                backgroundColor:
-                                  PRIORITY_COLOR[t.priority.toLowerCase()] || "#8C8AA0",
-                              }}
-                            />
-                            {t.priority}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-ink/70">
-                        {t.client ? (
-                          <Link
-                            href={`/dashboard/health?client=${encodeURIComponent(t.client)}`}
-                            className="hover:text-primary hover:underline transition-colors"
-                          >
-                            {t.client}
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <Pill colorKey={t.contentType}>{t.contentType}</Pill>
-                      </td>
-                      <td
-                        className={`py-2.5 px-3 text-right whitespace-nowrap ${
-                          overdue ? "text-tag-pink-text font-semibold" : "text-ink/70"
-                        }`}
-                      >
-                        {days}d
-                      </td>
-                      <td className="py-2.5 px-3 text-ink/70 whitespace-nowrap">
-                        {fmtDate(t.dueDate)}
-                      </td>
-                      <td className="py-2.5 px-3 text-ink/60">{t.projectKey}</td>
-                      <td className="py-2.5 pl-3 text-ink/60 whitespace-nowrap">
-                        {fmtDate(t.updated)}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {rows.length === 0 && (
-                  <tr>
-                    <td className="py-6 text-muted" colSpan={9}>
-                      No open tasks for this person.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <TaskTable tasks={selected.tasks} rules={rules} identityColumn="client" />
         </>
       )}
     </div>

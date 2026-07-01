@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { Search, X } from "lucide-react";
+import Link from "next/link";
+import { Search, X, ArrowLeft, Files, AlertTriangle, Layers, Clock } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, Pill } from "@/components/ui/Card";
+import { Card, Pill, StatCard } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CountUp } from "@/components/ui/CountUp";
+import { TaskTable } from "@/components/shared/TaskTable";
 import { useTasks, useSlaRules } from "@/lib/useTasks";
 import { isOpen, isBreached, groupCount } from "@/lib/metrics";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -13,6 +15,7 @@ export default function ClientHealthPage() {
   const { tasks, isLoading } = useTasks();
   const { rules } = useSlaRules();
   const [query, setQuery] = useState("");
+  const [onlyOpen, setOnlyOpen] = useState(true);
   const router = useRouter();
 
   // Arriving from a "drill into this client" link (e.g. the client bar list
@@ -24,11 +27,23 @@ export default function ClientHealthPage() {
     if (typeof client === "string" && client) setQuery(client);
   }, [router.isReady, router.query.client]);
 
+  const allClientNames = useMemo(
+    () => Array.from(new Set(tasks.map((t) => t.client).filter(Boolean) as string[])),
+    [tasks]
+  );
+
+  // An exact (not just substring) match means we arrived via a click-through
+  // link rather than someone typing a partial search — so instead of the
+  // filtered grid, show a full per-client detail view: KPI headers plus a
+  // real hyperlinked task table, one client, line by line.
+  const exactClient = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return null;
+    return allClientNames.find((c) => c.toLowerCase() === q) ?? null;
+  }, [allClientNames, query]);
+
   const clients = useMemo(() => {
-    const names = Array.from(
-      new Set(tasks.map((t) => t.client).filter(Boolean) as string[])
-    );
-    return names
+    return allClientNames
       .map((client) => {
         const clientTasks = tasks.filter((t) => t.client === client);
         const open = clientTasks.filter(isOpen);
@@ -42,7 +57,7 @@ export default function ClientHealthPage() {
       })
       .filter((c) => c.client.toLowerCase().includes(query.toLowerCase()))
       .sort((a, b) => b.open.length - a.open.length);
-  }, [tasks, rules, query]);
+  }, [allClientNames, tasks, rules, query]);
 
   if (isLoading) {
     return (
@@ -52,11 +67,68 @@ export default function ClientHealthPage() {
     );
   }
 
+  if (exactClient) {
+    const clientTasks = tasks.filter((t) => t.client === exactClient);
+    const scoped = onlyOpen ? clientTasks.filter(isOpen) : clientTasks;
+    const openTasks = clientTasks.filter(isOpen);
+    const breached = openTasks.filter((t) => isBreached(t, rules));
+    const contentTypes = groupCount(openTasks, (t) => t.contentType);
+    const avgQueueDays = openTasks.length
+      ? Math.round(openTasks.reduce((s, t) => s + t.hoursInQueue, 0) / openTasks.length / 24)
+      : 0;
+
+    return (
+      <DashboardLayout>
+        <PageHeader
+          title={exactClient}
+          description={`${clientTasks.length} task${clientTasks.length === 1 ? "" : "s"} tracked for this client.`}
+          actions={
+            <Link
+              href="/dashboard/health"
+              className="btn-press flex items-center gap-1.5 text-sm bg-white border border-line rounded-pill px-4 py-2 font-medium text-ink hover:bg-primary-light transition"
+            >
+              <ArrowLeft size={14} /> All clients
+            </Link>
+          }
+        />
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
+          <StatCard label="Open tasks" value={openTasks.length} icon={Files} gradient="violet" />
+          <StatCard
+            label="Overdue"
+            value={breached.length}
+            icon={AlertTriangle}
+            gradient="pink"
+            href="/dashboard/alerts"
+          />
+          <StatCard label="Content types" value={contentTypes.length} icon={Layers} gradient="orange" />
+          <StatCard label="Avg. queue" value={avgQueueDays} sublabel="days" icon={Clock} gradient="teal" />
+        </div>
+
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold">Tasks</h2>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={onlyOpen}
+                onChange={(e) => setOnlyOpen(e.target.checked)}
+                className="accent-primary"
+              />
+              Open tasks only
+            </label>
+          </div>
+          <TaskTable tasks={scoped} rules={rules} identityColumn="assignee" />
+        </Card>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <PageHeader
         title="Client health"
-        description="One quick-scan card per client."
+        description="One quick-scan card per client — click one for the full task list."
         actions={
           <div className="relative">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -81,37 +153,43 @@ export default function ClientHealthPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
         {clients.map((c) => (
-          <Card key={c.client}>
-            <div className="flex items-start justify-between mb-3 gap-2">
-              <h3 className="font-semibold text-sm leading-snug">{c.client}</h3>
-              {c.breached.length > 0 ? (
-                <Pill tone="danger">{c.breached.length} overdue</Pill>
-              ) : (
-                <Pill tone="success">Healthy</Pill>
-              )}
-            </div>
-            <div className="flex items-baseline gap-5 mb-3">
-              <div>
-                <p className="text-2xl font-bold">
-                  <CountUp value={c.open.length} />
-                </p>
-                <p className="label-caps">Open</p>
+          <Link
+            key={c.client}
+            href={`/dashboard/health?client=${encodeURIComponent(c.client)}`}
+            className="block"
+          >
+            <Card className="h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-cardHover">
+              <div className="flex items-start justify-between mb-3 gap-2">
+                <h3 className="font-semibold text-sm leading-snug">{c.client}</h3>
+                {c.breached.length > 0 ? (
+                  <Pill tone="danger">{c.breached.length} overdue</Pill>
+                ) : (
+                  <Pill tone="success">Healthy</Pill>
+                )}
               </div>
-              <div>
-                <p className="text-2xl font-bold text-ink/70">
-                  <CountUp value={c.avgQueue} suffix="h" />
-                </p>
-                <p className="label-caps">Avg. queue</p>
+              <div className="flex items-baseline gap-5 mb-3">
+                <div>
+                  <p className="text-2xl font-bold">
+                    <CountUp value={c.open.length} />
+                  </p>
+                  <p className="label-caps">Open</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-ink/70">
+                    <CountUp value={c.avgQueue} suffix="h" />
+                  </p>
+                  <p className="label-caps">Avg. queue</p>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {c.contentMix.slice(0, 4).map((m) => (
-                <Pill key={m.name} colorKey={m.name}>
-                  {m.name} · {m.value}
-                </Pill>
-              ))}
-            </div>
-          </Card>
+              <div className="flex flex-wrap gap-1.5">
+                {c.contentMix.slice(0, 4).map((m) => (
+                  <Pill key={m.name} colorKey={m.name}>
+                    {m.name} · {m.value}
+                  </Pill>
+                ))}
+              </div>
+            </Card>
+          </Link>
         ))}
         {clients.length === 0 && (
           <p className="text-sm text-muted">No clients match.</p>
