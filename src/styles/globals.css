@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: #f5f5fb;
+  }
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: #efebff;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d9d7ec transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-line rounded-card shadow-card p-5 transition-shadow duration-200;
+  }
+  .card:hover {
+    @apply shadow-cardHover;
+  }
+  .stat-number {
+    @apply text-3xl font-bold tracking-tight text-ink;
+  }
+  .label-caps {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-muted;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-xs font-medium;
+  }
+  .btn-press {
+    @apply active:scale-[0.97] transition-transform duration-100;
+  }
+  /* Stagger helper: children fade/slide in one after another. Apply
+     .stagger to a container and .stagger > * picks up the delay via nth-child. */
+  .stagger > * {
+    animation: fadeSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger > *:nth-child(7) { animation-delay: 240ms; }
+  .stagger > *:nth-child(8) { animation-delay: 280ms; }
+  .stagger > *:nth-child(n+9) { animation-delay: 320ms; }
+}
+
+@keyframes fadeSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
