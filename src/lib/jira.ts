@@ -26,6 +26,7 @@ const FIELDS = [
   "priority",
   "created",
   "updated",
+  "duedate",
   CLIENT_FIELD,
 ];
 
@@ -41,12 +42,14 @@ interface JiraApiIssue {
     assignee: {
       displayName: string;
       emailAddress?: string;
+      avatarUrls?: Record<string, string>;
     } | null;
     project: { key: string };
     labels: string[];
     priority: { name: string } | null;
     created: string;
     updated: string;
+    duedate: string | null;
     [key: string]: unknown;
   };
 }
@@ -77,12 +80,15 @@ function normalize(issue: JiraApiIssue): NormalizedTask {
     issueType: f.issuetype.name,
     assigneeName: f.assignee?.displayName ?? null,
     assigneeEmail: f.assignee?.emailAddress ?? null,
+    assigneeAvatarUrl:
+      f.assignee?.avatarUrls?.["48x48"] || f.assignee?.avatarUrls?.["32x32"] || null,
     client,
     labels: f.labels || [],
     contentType: f.labels?.[0] || "Uncategorized",
     priority: f.priority?.name ?? null,
     created: f.created,
     updated: f.updated,
+    dueDate: f.duedate ?? null,
     webUrl: `https://${SITE}/browse/${issue.key}`,
     hoursInQueue: hoursBetween(f.created, now),
     hoursSinceUpdate: hoursBetween(f.updated, now),

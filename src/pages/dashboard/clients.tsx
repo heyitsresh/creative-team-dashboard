@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Files, Building2, Layers, Star } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, StatCard } from "@/components/ui/Card";
@@ -69,21 +70,29 @@ export default function Clients() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
-        <StatCard label="Tasks in view" value={scoped.length} icon={Files} gradient="violet" />
-        <StatCard label="Clients" value={byClient.length} icon={Building2} gradient="orange" />
+        <StatCard label="Tasks in view" value={scoped.length} icon={Files} gradient="violet" href="/dashboard/status" />
+        <StatCard label="Clients" value={byClient.length} icon={Building2} gradient="orange" href="/dashboard/health" />
         <StatCard label="Content types" value={byContentType.length} icon={Layers} gradient="teal" />
         <StatCard
           label="Top client tasks"
           value={byClient[0]?.value ?? 0}
           icon={Star}
           gradient="pink"
+          href={
+            byClient[0]
+              ? `/dashboard/health?client=${encodeURIComponent(byClient[0].name)}`
+              : undefined
+          }
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <Card className="lg:col-span-2">
           <h2 className="font-semibold mb-4">Tasks per client</h2>
-          <BarList data={byClient} />
+          <BarList
+            data={byClient}
+            getHref={(d) => `/dashboard/health?client=${encodeURIComponent(d.name)}`}
+          />
         </Card>
         <Card>
           <h2 className="font-semibold mb-4">Tasks per content type</h2>
@@ -114,7 +123,14 @@ export default function Clients() {
                 );
                 return (
                   <tr key={row.client as string} className="border-b border-line/60 hover:bg-paper/60 transition-colors">
-                    <td className="py-2.5 pr-4">{row.client}</td>
+                    <td className="py-2.5 pr-4">
+                      <Link
+                        href={`/dashboard/health?client=${encodeURIComponent(row.client as string)}`}
+                        className="font-medium hover:text-primary hover:underline transition-colors"
+                      >
+                        {row.client}
+                      </Link>
+                    </td>
                     {matrix.types.map((t) => (
                       <td key={t} className="py-2.5 px-3 text-right text-ink/70">
                         {row[t] || "–"}

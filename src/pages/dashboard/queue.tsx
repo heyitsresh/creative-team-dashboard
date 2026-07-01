@@ -1,4 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import { X } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -12,6 +15,17 @@ export default function QueuePage() {
   const { tasks, isLoading: tasksLoading } = useTasks();
   const { members, isLoading: teamLoading } = useTeamData();
   const { rules, isLoading: rulesLoading } = useSlaRules();
+  const router = useRouter();
+
+  // Arriving from an avatar click elsewhere (Overview's "Team" card, an org
+  // chart member, etc.) scopes this page to just that person via
+  // ?person=<jira_email> instead of showing the whole team's workload.
+  const [personFilter, setPersonFilter] = useState<string | null>(null);
+  useEffect(() => {
+    if (!router.isReady) return;
+    const person = router.query.person;
+    setPersonFilter(typeof person === "string" && person ? person.toLowerCase() : null);
+  }, [router.isReady, router.query.person]);
 
   const open = useMemo(() => tasks.filter(isOpen), [tasks]);
 
@@ -35,8 +49,20 @@ export default function QueuePage() {
       .sort((a, b) => b.utilization - a.utilization);
   }, [members, open, rules]);
 
+  const filteredMember = personFilter
+    ? members.find((m) => m.jira_email?.toLowerCase() === personFilter)
+    : null;
+
+  const scopedOpen = useMemo(
+    () =>
+      personFilter
+        ? open.filter((t) => t.assigneeEmail?.toLowerCase() === personFilter)
+        : open,
+    [open, personFilter]
+  );
+
   const queueRows = useMemo(() => {
-    return [...open]
+    return [...scopedOpen]
       .map((t) => ({
         task: t,
         budget: slaHoursFor(t, rules),
@@ -44,7 +70,7 @@ export default function QueuePage() {
       }))
       .sort((a, b) => b.pctOfBudget - a.pctOfBudget)
       .slice(0, 40);
-  }, [open, rules]);
+  }, [scopedOpen, rules]);
 
   if (tasksLoading || teamLoading || rulesLoading) {
     return (
@@ -61,26 +87,56 @@ export default function QueuePage() {
         description="Standard labor-hours (open tasks × content-type effort) against each person's weekly capacity, plus how long individual tasks have sat relative to their turnaround SLA. Both hour figures are set per content type in Settings."
       />
 
+      {personFilter && (
+        <div className="flex items-center gap-2 mb-6 -mt-2">
+          <span className="text-sm text-muted">Viewing:</span>
+          <span className="pill bg-primary-light text-primary flex items-center gap-2">
+            <Avatar name={filteredMember?.name || personFilter} size={16} />
+            {filteredMember?.name || personFilter}
+            <Link
+              href="/dashboard/queue"
+              className="hover:text-tag-pink-text transition-colors"
+              aria-label="Clear filter"
+            >
+              <X size={12} />
+            </Link>
+          </span>
+        </div>
+      )}
+
       <Card className="mb-6">
         <h2 className="font-semibold mb-4">Workload vs. available time, per person</h2>
-        <div className="flex flex-col gap-3.5 stagger">
-          {workload.map(({ member, taskCount, estimatedHours, weeklyCapacity, utilization }) => (
-            <div key={member.id} className="flex items-center gap-3 text-sm">
-              <Avatar name={member.name} size={26} />
-              <span className="w-32 truncate">{member.name}</span>
-              <div className="flex-1 h-2.5 bg-line/60 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    utilization > 1 ? "bg-tag-pink-text" : "bg-primary"
-                  }`}
-                  style={{ width: `${Math.min(100, utilization * 100)}%` }}
-                />
-              </div>
-              <span className="w-44 text-right text-muted">
-                {Math.round(estimatedHours)}h / {weeklyCapacity}h ({taskCount} tasks)
-              </span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-1 stagger">
+          {workload.map(({ member, taskCount, estimatedHours, weeklyCapacity, utilization }) => {
+            const isActive = personFilter && member.jira_email?.toLowerCase() === personFilter;
+            return (
+              <Link
+                key={member.id}
+                href={
+                  isActive
+                    ? "/dashboard/queue"
+                    : `/dashboard/queue?person=${encodeURIComponent(member.jira_email || "")}`
+                }
+                className={`flex items-center gap-3 text-sm -mx-2 px-2 py-2 rounded-lg transition-colors duration-150 ${
+                  isActive ? "bg-primary-light" : "hover:bg-paper/70"
+                } ${member.jira_email ? "" : "pointer-events-none opacity-60"}`}
+              >
+                <Avatar name={member.name} size={26} />
+                <span className="w-32 truncate">{member.name}</span>
+                <div className="flex-1 h-2.5 bg-line/60 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      utilization > 1 ? "bg-tag-pink-text" : "bg-primary"
+                    }`}
+                    style={{ width: `${Math.min(100, utilization * 100)}%` }}
+                  />
+                </div>
+                <span className="w-44 text-right text-muted">
+                  {Math.round(estimatedHours)}h / {weeklyCapacity}h ({taskCount} tasks)
+                </span>
+              </Link>
+            );
+          })}
           {workload.length === 0 && (
             <p className="text-sm text-muted">
               No team members yet — add your roster in Settings to see workload here.
@@ -90,7 +146,11 @@ export default function QueuePage() {
       </Card>
 
       <Card>
-        <h2 className="font-semibold mb-4">Tasks closest to (or past) SLA</h2>
+        <h2 className="font-semibold mb-4">
+          {personFilter
+            ? `${filteredMember?.name || "This person"}'s tasks closest to (or past) SLA`
+            : "Tasks closest to (or past) SLA"}
+        </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -117,11 +177,33 @@ export default function QueuePage() {
                     </a>
                     <p className="text-xs text-muted truncate max-w-xs">{task.summary}</p>
                   </td>
-                  <td className="py-2.5 px-3 text-ink/70">{task.client || "—"}</td>
+                  <td className="py-2.5 px-3 text-ink/70">
+                    {task.client ? (
+                      <Link
+                        href={`/dashboard/health?client=${encodeURIComponent(task.client)}`}
+                        className="hover:text-primary hover:underline transition-colors"
+                      >
+                        {task.client}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="py-2.5 px-3">
                     <Pill colorKey={task.contentType}>{task.contentType}</Pill>
                   </td>
-                  <td className="py-2.5 px-3 text-ink/70">{task.assigneeName || "Unassigned"}</td>
+                  <td className="py-2.5 px-3 text-ink/70">
+                    {task.assigneeEmail ? (
+                      <Link
+                        href={`/dashboard/queue?person=${encodeURIComponent(task.assigneeEmail)}`}
+                        className="hover:text-primary hover:underline transition-colors"
+                      >
+                        {task.assigneeName || task.assigneeEmail}
+                      </Link>
+                    ) : (
+                      task.assigneeName || "Unassigned"
+                    )}
+                  </td>
                   <td className="py-2.5 px-3 text-right">
                     {Math.round(task.hoursInQueue)}h / {Math.round(budget)}h
                   </td>

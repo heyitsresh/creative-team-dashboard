@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { CountUp } from "@/components/ui/CountUp";
 
 export function Card({
@@ -25,17 +27,25 @@ export function StatCard({
   sublabel,
   icon: Icon,
   gradient,
+  href,
 }: {
   label: string;
   value: number;
   sublabel?: string;
   icon?: LucideIcon;
   gradient?: "violet" | "pink" | "orange" | "teal";
+  /** Optional destination — makes the card clickable/tappable with a hover + press animation. */
+  href?: string;
 }) {
+  const clickable = Boolean(href);
+  const interactiveClasses = clickable
+    ? "cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-cardHover active:scale-[0.97] active:duration-75"
+    : "";
+
   if (gradient) {
-    return (
+    const content = (
       <div
-        className={`rounded-card p-5 flex flex-col gap-3 text-white bg-gradient-to-br ${GRADIENTS[gradient]} shadow-card animate-fade-slide-in`}
+        className={`group relative overflow-hidden rounded-card p-5 flex flex-col gap-3 text-white bg-gradient-to-br ${GRADIENTS[gradient]} shadow-card animate-fade-slide-in ${interactiveClasses}`}
       >
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-white/80">{label}</span>
@@ -49,12 +59,25 @@ export function StatCard({
           <CountUp value={value} />
         </span>
         {sublabel && <span className="text-xs text-white/70">{sublabel}</span>}
+        {clickable && (
+          <ArrowRight
+            size={16}
+            className="absolute bottom-4 right-4 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0"
+          />
+        )}
       </div>
+    );
+    return href ? (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    ) : (
+      content
     );
   }
 
-  return (
-    <div className="card flex flex-col gap-1 min-w-[150px] animate-fade-slide-in">
+  const content = (
+    <div className={`group relative card flex flex-col gap-1 min-w-[150px] animate-fade-slide-in ${interactiveClasses}`}>
       <div className="flex items-center justify-between">
         <span className="label-caps">{label}</span>
         {Icon && (
@@ -67,7 +90,20 @@ export function StatCard({
         <CountUp value={value} />
       </span>
       {sublabel && <span className="text-xs text-muted">{sublabel}</span>}
+      {clickable && (
+        <ArrowRight
+          size={14}
+          className="absolute bottom-4 right-4 text-primary opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0"
+        />
+      )}
     </div>
+  );
+  return href ? (
+    <Link href={href} className="block">
+      {content}
+    </Link>
+  ) : (
+    content
   );
 }
 

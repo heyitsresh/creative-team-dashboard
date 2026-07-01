@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 const RING_COLORS = [
   "bg-primary",
   "bg-tag-pink-text",
@@ -26,10 +28,35 @@ function colorFor(name: string) {
 export function Avatar({
   name,
   size = 28,
+  src,
 }: {
   name: string;
   size?: number;
+  /** Real Jira profile photo URL. Falls back to color-coded initials if missing or if the image fails to load. */
+  src?: string | null;
 }) {
+  const [failed, setFailed] = useState(false);
+
+  if (src && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        title={name}
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
+        className="rounded-full object-cover shrink-0 ring-2 ring-white"
+        style={{ width: size, height: size }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return <InitialsAvatar name={name} size={size} />;
+}
+
+function InitialsAvatar({ name, size }: { name: string; size: number }) {
   return (
     <div
       className="rounded-full flex items-center justify-center text-white font-semibold shrink-0 ring-2 ring-white"

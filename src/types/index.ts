@@ -9,12 +9,14 @@ export interface NormalizedTask {
   issueType: string;
   assigneeName: string | null;
   assigneeEmail: string | null;
+  assigneeAvatarUrl: string | null;
   client: string | null; // from JIRA_CLIENT_FIELD (customfield_10866)
   labels: string[];
   contentType: string; // first label, or "Uncategorized"
   priority: string | null;
   created: string;
   updated: string;
+  dueDate: string | null;
   webUrl: string;
   // Hours since creation the task has been open (or, if done, hours it took)
   hoursInQueue: number;

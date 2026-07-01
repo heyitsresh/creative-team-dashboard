@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Clock, Building2, Users2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill, StatCard } from "@/components/ui/Card";
@@ -46,18 +47,21 @@ export default function AlertsPage() {
           value={breaches[0] ? Math.round(breaches[0].overBy) : 0}
           icon={Clock}
           gradient="orange"
+          href="/dashboard/queue"
         />
         <StatCard
           label="Clients affected"
           value={new Set(breaches.map((b) => b.task.client).filter(Boolean)).size}
           icon={Building2}
           gradient="violet"
+          href="/dashboard/health"
         />
         <StatCard
           label="People affected"
           value={new Set(breaches.map((b) => b.task.assigneeName).filter(Boolean)).size}
           icon={Users2}
           gradient="teal"
+          href="/dashboard/team"
         />
       </div>
 
@@ -91,7 +95,13 @@ function AlertRow({
     <Card>
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0 flex items-start gap-3">
-          {task.assigneeName && <Avatar name={task.assigneeName} size={32} />}
+          {task.assigneeEmail ? (
+            <Link href={`/dashboard/queue?person=${encodeURIComponent(task.assigneeEmail)}`}>
+              <Avatar name={task.assigneeName || "?"} src={task.assigneeAvatarUrl} size={32} />
+            </Link>
+          ) : (
+            task.assigneeName && <Avatar name={task.assigneeName} size={32} />
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <a
@@ -107,8 +117,28 @@ function AlertRow({
             </div>
             <p className="text-sm truncate">{task.summary}</p>
             <p className="text-xs text-muted mt-1">
-              {task.client || "No client"} · {task.assigneeName || "Unassigned"} · budget {Math.round(budget)}h,
-              currently at {Math.round(task.hoursInQueue)}h
+              {task.client ? (
+                <Link
+                  href={`/dashboard/health?client=${encodeURIComponent(task.client)}`}
+                  className="hover:text-primary hover:underline transition-colors"
+                >
+                  {task.client}
+                </Link>
+              ) : (
+                "No client"
+              )}{" "}
+              ·{" "}
+              {task.assigneeEmail ? (
+                <Link
+                  href={`/dashboard/queue?person=${encodeURIComponent(task.assigneeEmail)}`}
+                  className="hover:text-primary hover:underline transition-colors"
+                >
+                  {task.assigneeName || task.assigneeEmail}
+                </Link>
+              ) : (
+                task.assigneeName || "Unassigned"
+              )}{" "}
+              · budget {Math.round(budget)}h, currently at {Math.round(task.hoursInQueue)}h
             </p>
           </div>
         </div>

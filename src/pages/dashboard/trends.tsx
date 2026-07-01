@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader, TabButton } from "@/components/ui/PageHeader";
@@ -64,9 +65,15 @@ export default function TrendsPage() {
         <h2 className="font-semibold mb-4">Busiest clients right now</h2>
         <div className="flex flex-wrap gap-2">
           {topClients.map((c) => (
-            <Pill key={c.name} colorKey={c.name}>
-              {c.name} · {c.value}
-            </Pill>
+            <Link
+              key={c.name}
+              href={`/dashboard/health?client=${encodeURIComponent(c.name)}`}
+              className="hover:-translate-y-0.5 transition-transform duration-150"
+            >
+              <Pill colorKey={c.name}>
+                {c.name} · {c.value}
+              </Pill>
+            </Link>
           ))}
         </div>
       </Card>

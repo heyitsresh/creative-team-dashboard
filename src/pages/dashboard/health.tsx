@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
+import { Search, X } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -12,6 +13,16 @@ export default function ClientHealthPage() {
   const { tasks, isLoading } = useTasks();
   const { rules } = useSlaRules();
   const [query, setQuery] = useState("");
+  const router = useRouter();
+
+  // Arriving from a "drill into this client" link (e.g. the client bar list
+  // on Overview/Clients) pre-fills the filter with ?client=<name> so this
+  // page lands scoped to that one client instead of showing everyone.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const client = router.query.client;
+    if (typeof client === "string" && client) setQuery(client);
+  }, [router.isReady, router.query.client]);
 
   const clients = useMemo(() => {
     const names = Array.from(
@@ -55,6 +66,15 @@ export default function ClientHealthPage() {
               onChange={(e) => setQuery(e.target.value)}
               className="border border-line rounded-pill pl-9 pr-4 py-2 text-sm bg-white w-64 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
             />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-ink transition-colors"
+                aria-label="Clear filter"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         }
       />
