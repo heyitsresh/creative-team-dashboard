@@ -7,13 +7,15 @@ import { Card, Pill, StatCard } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CountUp } from "@/components/ui/CountUp";
 import { TaskTable } from "@/components/shared/TaskTable";
-import { useTasks, useSlaRules } from "@/lib/useTasks";
+import { Avatar } from "@/components/ui/Avatar";
+import { useTasks, useSlaRules, useTeamData } from "@/lib/useTasks";
 import { isOpen, isBreached, groupCount } from "@/lib/metrics";
 import { LoadingState } from "@/components/ui/LoadingState";
 
 export default function ClientHealthPage() {
   const { tasks, isLoading } = useTasks();
   const { rules } = useSlaRules();
+  const { teams, members, isLoading: teamLoading } = useTeamData();
   const [query, setQuery] = useState("");
   const [onlyOpen, setOnlyOpen] = useState(true);
   const router = useRouter();
@@ -59,7 +61,7 @@ export default function ClientHealthPage() {
       .sort((a, b) => b.open.length - a.open.length);
   }, [allClientNames, tasks, rules, query]);
 
-  if (isLoading) {
+  if (isLoading || teamLoading) {
     return (
       <DashboardLayout>
         <LoadingState label="Pulling from Jira…" />
@@ -77,6 +79,28 @@ export default function ClientHealthPage() {
       ? Math.round(openTasks.reduce((s, t) => s + t.hoursInQueue, 0) / openTasks.length / 24)
       : 0;
 
+    // Who's actually touching this client's work, and which of their teams
+    // that pulls in — lets you glance at "who do I talk to about this
+    // client" without hunting through the org chart.
+    const peopleOnClient = members
+      .map((m) => {
+        const mine = clientTasks.filter(
+          (t) => m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
+        );
+        const openMine = mine.filter(isOpen);
+        return {
+          member: m,
+          count: mine.length,
+          openCount: openMine.length,
+          avatarUrl: mine.find((t) => t.assigneeAvatarUrl)?.assigneeAvatarUrl,
+        };
+      })
+      .filter((p) => p.count > 0)
+      .sort((a, b) => b.count - a.count);
+    const teamsOnClient = teams.filter((t) =>
+      peopleOnClient.some((p) => p.member.team_id === t.id)
+    );
+
     return (
       <DashboardLayout>
         <PageHeader
@@ -93,7 +117,13 @@ export default function ClientHealthPage() {
         />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
-          <StatCard label="Open tasks" value={openTasks.length} icon={Files} gradient="violet" />
+          <StatCard
+            label="Open tasks"
+            value={openTasks.length}
+            icon={Files}
+            gradient="violet"
+            href="/dashboard/status"
+          />
           <StatCard
             label="Overdue"
             value={breached.length}
@@ -101,9 +131,65 @@ export default function ClientHealthPage() {
             gradient="pink"
             href="/dashboard/alerts"
           />
-          <StatCard label="Content types" value={contentTypes.length} icon={Layers} gradient="orange" />
-          <StatCard label="Avg. queue" value={avgQueueDays} sublabel="days" icon={Clock} gradient="teal" />
+          <StatCard
+            label="Content types"
+            value={contentTypes.length}
+            icon={Layers}
+            gradient="orange"
+            href="/dashboard/clients"
+          />
+          <StatCard
+            label="Avg. queue"
+            value={avgQueueDays}
+            sublabel="days"
+            icon={Clock}
+            gradient="teal"
+            href="/dashboard/queue"
+          />
         </div>
+
+        {peopleOnClient.length > 0 && (
+          <Card className="mb-6">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h2 className="font-semibold">Team on this client</h2>
+              {teamsOnClient.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {teamsOnClient.map((t) => (
+                    <Pill key={t.id} colorKey={t.name}>
+                      {t.name}
+                    </Pill>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-4 flex-wrap">
+              {peopleOnClient.map(({ member, count, openCount, avatarUrl }) => (
+                <Link
+                  key={member.id}
+                  href={`/dashboard/queue?person=${encodeURIComponent(member.jira_email || "")}`}
+                  className="btn-press flex flex-col items-center gap-1.5 w-20 group"
+                >
+                  <div className="relative transition-transform duration-150 group-hover:-translate-y-0.5">
+                    <Avatar name={member.name} src={avatarUrl} size={40} />
+                    <span
+                      className={`absolute -top-1 -right-1 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-white ring-2 ring-white ${
+                        openCount > 0 ? "bg-primary" : "bg-muted"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </div>
+                  <span className="text-xs text-ink/70 truncate w-full text-center group-hover:text-primary transition-colors">
+                    {member.name.split(" ")[0]}
+                  </span>
+                  <span className="text-[10px] text-muted truncate w-full text-center">
+                    {member.role || "—"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <Card>
           <div className="flex items-center justify-between mb-4">
