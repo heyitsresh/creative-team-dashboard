@@ -66,10 +66,6 @@ export default function StatusPage() {
   );
   const byProject = useMemo(() => groupCount(tasks, (t) => t.projectKey), [tasks]);
 
-  const statusOptions = useMemo(
-    () => Array.from(new Set(tasks.map((t) => t.status))).sort(),
-    [tasks]
-  );
   const typeOptions = useMemo(
     () => Array.from(new Set(tasks.map((t) => t.contentType))).sort(),
     [tasks]
@@ -182,6 +178,16 @@ export default function StatusPage() {
       {view === "list" && (
         <Card>
           <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            <button
+              onClick={() => setStatusFilter(ALL)}
+              className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                statusFilter === ALL
+                  ? "bg-primary text-white"
+                  : "bg-paper text-ink/70 hover:bg-primary-light"
+              }`}
+            >
+              All tasks <span className="opacity-70">{tasks.length}</span>
+            </button>
             {byStatus.map((s) => {
               const active = statusFilter === s.name;
               return (
@@ -209,18 +215,6 @@ export default function StatusPage() {
                 className="w-full border border-line rounded-pill pl-9 pr-4 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
               />
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-line rounded-pill pl-3.5 pr-8 py-2 text-sm bg-white font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition cursor-pointer"
-            >
-              <option value={ALL}>All statuses</option>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}

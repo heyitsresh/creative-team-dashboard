@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Search, Tag } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, Tag, Pencil, Check, X } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -86,6 +86,46 @@ export default function ByProductPage() {
       (t) => t.key.toLowerCase().includes(q) || t.summary.toLowerCase().includes(q)
     );
   }, [selected, search]);
+
+  // Renaming the whole group (from the header) re-tags every task currently
+  // in it at once — e.g. clear out "No ASIN Detected" in bulk by assigning
+  // the real ASIN to all of them in one go, instead of tagging one task at
+  // a time.
+  const [renamingGroup, setRenamingGroup] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  useEffect(() => {
+    setRenamingGroup(false);
+  }, [selectedAsin]);
+
+  function startGroupRename() {
+    setRenameValue(selected?.asin === NO_ASIN ? "" : selected?.asin ?? "");
+    setRenamingGroup(true);
+  }
+
+  async function saveGroupRename() {
+    const newAsin = renameValue.trim().toUpperCase();
+    if (!selected || !newAsin || newAsin === selected.asin) {
+      setRenamingGroup(false);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await fetch("/api/asin-overrides", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: selected.tasks.map((t) => ({ issue_key: t.key, asin: newAsin })),
+        }),
+      });
+      await refreshOverrides();
+      setSelectedAsin(newAsin);
+      setRenamingGroup(false);
+    } finally {
+      setRenaming(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -211,9 +251,59 @@ export default function ByProductPage() {
 
         <Card>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="font-semibold font-mono">{selected?.asin ?? "—"}</h2>
+            {renamingGroup ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveGroupRename();
+                    if (e.key === "Escape") setRenamingGroup(false);
+                  }}
+                  placeholder="Real ASIN…"
+                  className="border border-line rounded-lg px-2 py-1 text-sm font-mono bg-white w-40 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
+                />
+                <button
+                  onClick={saveGroupRename}
+                  disabled={renaming}
+                  title="Save — retags every task in this group"
+                  className="btn-press h-7 w-7 rounded-lg bg-primary text-white flex items-center justify-center disabled:opacity-50"
+                >
+                  <Check size={13} />
+                </button>
+                <button
+                  onClick={() => setRenamingGroup(false)}
+                  title="Cancel"
+                  className="btn-press h-7 w-7 rounded-lg border border-line flex items-center justify-center hover:bg-paper transition-colors"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startGroupRename}
+                disabled={!selected}
+                className="group flex items-center gap-2 disabled:cursor-not-allowed"
+                title="Rename this group — retags every task in it at once"
+              >
+                <h2 className="font-semibold font-mono">{selected?.asin ?? "—"}</h2>
+                {selected && (
+                  <Pencil
+                    size={13}
+                    className="text-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                  />
+                )}
+              </button>
+            )}
             <span className="text-xs text-muted">{selectedRows.length} open tasks</span>
           </div>
+          {renamingGroup && (
+            <p className="text-xs text-muted -mt-2 mb-4">
+              Saving retags all {selected?.tasks.length ?? 0} task
+              {selected?.tasks.length === 1 ? "" : "s"} currently in this group to the new ASIN.
+            </p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

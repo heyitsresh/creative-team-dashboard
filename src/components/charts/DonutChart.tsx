@@ -5,18 +5,25 @@ export function DonutChart({
   data,
   height = 220,
   showLegend = true,
+  fillAvailableHeight = false,
 }: {
   data: { name: string; value: number }[];
   height?: number;
   /** Renders a scrollable color-key legend under the chart (on by default — a plain donut with no labels is unreadable past 4-5 slices). */
   showLegend?: boolean;
+  /** When true, the legend grows to fill whatever vertical space its parent
+   * gives it instead of being capped at a fixed max-height — use this when
+   * the chart sits in a card that's being stretched to match a taller
+   * sibling (e.g. next to a long bar list), so the extra room doesn't go to
+   * waste. Requires the parent to be a flex column with a real height. */
+  fillAvailableHeight?: boolean;
 }) {
   if (data.length === 0) {
     return <p className="text-sm text-muted py-10 text-center">No data yet.</p>;
   }
   const total = data.reduce((s, d) => s + d.value, 0);
   return (
-    <div>
+    <div className={fillAvailableHeight ? "h-full flex flex-col" : ""}>
       <ResponsiveContainer width="100%" height={height}>
         <PieChart>
           <Pie
@@ -42,7 +49,11 @@ export function DonutChart({
         </PieChart>
       </ResponsiveContainer>
       {showLegend && (
-        <ul className="mt-3 max-h-40 overflow-y-auto pr-1 space-y-1.5">
+        <ul
+          className={`mt-3 pr-1 space-y-1.5 ${
+            fillAvailableHeight ? "flex-1 min-h-0 overflow-y-auto" : "max-h-40 overflow-y-auto"
+          }`}
+        >
           {data.map((d, i) => (
             <li key={d.name} className="flex items-center justify-between gap-3 text-xs">
               <span className="flex items-center gap-2 min-w-0 text-ink/70">

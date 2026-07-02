@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -48,8 +48,10 @@ export default function QueuePage() {
         const weeklyCapacity = m.weekly_capacity_hours || 40;
         const overdueCount = mine.filter((t) => isBreached(t, rules)).length;
         const hoursByStatus: Record<string, number> = {};
+        const countByStatus: Record<string, number> = {};
         for (const t of mine) {
           hoursByStatus[t.status] = (hoursByStatus[t.status] || 0) + standardHoursFor(t, rules);
+          countByStatus[t.status] = (countByStatus[t.status] || 0) + 1;
         }
         return {
           member: m,
@@ -59,10 +61,16 @@ export default function QueuePage() {
           utilization: weeklyCapacity > 0 ? estimatedHours / weeklyCapacity : 0,
           overdueCount,
           hoursByStatus,
+          countByStatus,
         };
       })
       .sort((a, b) => b.utilization - a.utilization);
   }, [members, open, rules]);
+
+  const totalOverdue = useMemo(
+    () => workload.reduce((sum, w) => sum + w.overdueCount, 0),
+    [workload]
+  );
 
   const filteredMember = personFilter
     ? members.find((m) => m.jira_email?.toLowerCase() === personFilter)
@@ -121,7 +129,15 @@ export default function QueuePage() {
 
       <Card className="mb-6">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h2 className="font-semibold">Workload vs. available time, per person</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="font-semibold">Workload vs. available time, per person</h2>
+            {totalOverdue > 0 && (
+              <span className="pill bg-red-800 text-white font-semibold flex items-center gap-1.5">
+                <AlertTriangle size={12} />
+                {totalOverdue} overdue across the team
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 text-xs text-muted flex-wrap max-w-md justify-end">
             {openStatuses.map((s) => (
               <span key={s} className="flex items-center gap-1.5">
@@ -144,6 +160,7 @@ export default function QueuePage() {
               utilization,
               overdueCount,
               hoursByStatus,
+              countByStatus,
             }) => {
               const isActive = personFilter && member.jira_email?.toLowerCase() === personFilter;
               const barWidth = Math.min(100, utilization * 100);
@@ -169,11 +186,13 @@ export default function QueuePage() {
                     >
                       {openStatuses.map((s) => {
                         const statusHours = hoursByStatus[s] || 0;
+                        const statusCount = countByStatus[s] || 0;
                         const pct = estimatedHours > 0 ? (statusHours / estimatedHours) * 100 : 0;
                         if (pct <= 0) return null;
                         return (
                           <div
                             key={s}
+                            title={`${s}: ${statusCount} task${statusCount === 1 ? "" : "s"} · ${Math.round(statusHours)}h`}
                             style={{ width: `${pct}%`, backgroundColor: statusDotColor(s) }}
                           />
                         );

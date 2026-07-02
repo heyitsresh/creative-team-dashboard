@@ -1,41 +1,39 @@
-<svg width="360" height="250" viewBox="0 0 360 250" xmlns="http://www.w3.org/2000/svg">
-  <g transform="translate(0,25)">
-    <text
-      x="6"
-      y="148"
-      font-family="'Poppins','Segoe UI',Arial,sans-serif"
-      font-weight="700"
-      font-size="90"
-      fill="#2E63A6"
-      letter-spacing="-2"
-    >ave</text>
+<svg width="370" height="280" viewBox="-15 -30 370 280" xmlns="http://www.w3.org/2000/svg">
+  <text
+    x="6"
+    y="148"
+    font-family="'Poppins','Segoe UI',Arial,sans-serif"
+    font-weight="700"
+    font-size="90"
+    fill="#2E63A6"
+    letter-spacing="-2"
+  >ave</text>
 
-    <g fill="#E8622C" transform="translate(35,0) rotate(-6 200 110)">
-      <path d="
-        M 192,10
-        L 296,0
-        L 308,10
-        L 310,26
-        L 300,54
-        L 296,60
-        L 226,72
-        L 214,84
-        L 150,206
-        L 138,218
-        L 122,220
-        L 104,210
-        L 100,196
-        L 108,188
-        L 166,72
-        L 172,58
-        L 176,46
-        L 168,36
-        L 172,24
-        L 192,10
-        Z"
-      />
-      <ellipse cx="118" cy="204" rx="5" ry="3" transform="rotate(-30 118 204)" />
-      <ellipse cx="302" cy="16" rx="4" ry="2.5" transform="rotate(15 302 16)" />
-    </g>
+  <g fill="#E8622C" transform="translate(35,0) rotate(-6 200 110)">
+    <path d="
+      M 192,10
+      L 296,0
+      L 308,10
+      L 310,26
+      L 300,54
+      L 296,60
+      L 226,72
+      L 214,84
+      L 150,206
+      L 138,218
+      L 122,220
+      L 104,210
+      L 100,196
+      L 108,188
+      L 166,72
+      L 172,58
+      L 176,46
+      L 168,36
+      L 172,24
+      L 192,10
+      Z"
+    />
+    <ellipse cx="118" cy="204" rx="5" ry="3" transform="rotate(-30 118 204)" />
+    <ellipse cx="302" cy="16" rx="4" ry="2.5" transform="rotate(15 302 16)" />
   </g>
 </svg>
