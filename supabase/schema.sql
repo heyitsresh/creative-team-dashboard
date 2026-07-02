@@ -139,19 +139,33 @@ alter table sla_rules enable row level security;
 alter table task_notes enable row level security;
 alter table clients enable row level security;
 
+-- "drop ... if exists" before each "create policy" because Postgres has no
+-- "create policy if not exists" — without this, re-running this file after
+-- the first time (e.g. to pick up the new clients table below) fails with
+-- "policy ... already exists" and aborts before reaching the seed data.
+drop policy if exists "avenue7 read teams" on teams;
 create policy "avenue7 read teams" on teams for select using (is_avenue7_user());
+drop policy if exists "avenue7 write teams" on teams;
 create policy "avenue7 write teams" on teams for all using (is_avenue7_user()) with check (is_avenue7_user());
 
+drop policy if exists "avenue7 read team_members" on team_members;
 create policy "avenue7 read team_members" on team_members for select using (is_avenue7_user());
+drop policy if exists "avenue7 write team_members" on team_members;
 create policy "avenue7 write team_members" on team_members for all using (is_avenue7_user()) with check (is_avenue7_user());
 
+drop policy if exists "avenue7 read sla_rules" on sla_rules;
 create policy "avenue7 read sla_rules" on sla_rules for select using (is_avenue7_user());
+drop policy if exists "avenue7 write sla_rules" on sla_rules;
 create policy "avenue7 write sla_rules" on sla_rules for all using (is_avenue7_user()) with check (is_avenue7_user());
 
+drop policy if exists "avenue7 read task_notes" on task_notes;
 create policy "avenue7 read task_notes" on task_notes for select using (is_avenue7_user());
+drop policy if exists "avenue7 write task_notes" on task_notes;
 create policy "avenue7 write task_notes" on task_notes for all using (is_avenue7_user()) with check (is_avenue7_user());
 
+drop policy if exists "avenue7 read clients" on clients;
 create policy "avenue7 read clients" on clients for select using (is_avenue7_user());
+drop policy if exists "avenue7 write clients" on clients;
 create policy "avenue7 write clients" on clients for all using (is_avenue7_user()) with check (is_avenue7_user());
 
 -- ---------------------------------------------------------------------------
