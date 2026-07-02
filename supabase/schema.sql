@@ -104,6 +104,35 @@ create table if not exists clients (
 create index if not exists clients_team_id_idx on clients(team_id);
 
 -- ---------------------------------------------------------------------------
+-- Team Calendar: public holidays (US / PH / PK, seeded below) plus
+-- team-submitted leave requests. Both editable in-app (autosave), so the
+-- seeded holiday list is a starting point, not a hard-coded source of
+-- truth — add/remove rows on the Team Calendar page as needed.
+-- ---------------------------------------------------------------------------
+create table if not exists holidays (
+  id uuid primary key default gen_random_uuid(),
+  country text not null, -- 'US' | 'PH' | 'PK'
+  name text not null,
+  date date not null,
+  created_at timestamptz not null default now(),
+  unique (country, name, date)
+);
+
+create index if not exists holidays_date_idx on holidays(date);
+
+create table if not exists leave_requests (
+  id uuid primary key default gen_random_uuid(),
+  team_member_id uuid references team_members(id) on delete cascade,
+  start_date date not null,
+  end_date date not null,
+  reason text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists leave_requests_member_idx on leave_requests(team_member_id);
+create index if not exists leave_requests_dates_idx on leave_requests(start_date, end_date);
+
+-- ---------------------------------------------------------------------------
 -- updated_at triggers
 -- ---------------------------------------------------------------------------
 create or replace function set_updated_at() returns trigger as $$
@@ -335,3 +364,100 @@ https://lafreshgroup.com/', '/logos/yain-diamond-wipes.png', 9),
   ((select id from teams where name = 'Musa' limit 1), 'Dig Defense', 'LOW PRIORITY', 'Bundle Listing Creation / Re-Ops', 'Pet Safety & Outdoor Animal Control', 'https://digdefence.com/', '/logos/musa-dig-defense.png', 35),
   ((select id from teams where name = 'Noor' limit 1), 'Oak & Antler', 'MED PRIORITY', 'New client - on going onboarding', 'Mixed Spices & Seasoning', 'https://oakandantler.com', NULL, 36)
 on conflict (team_id, name) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Holiday seed data — 2026 public holidays for US, Philippines, and
+-- Pakistan, sourced from official government holiday lists (US OPM, PH
+-- Proclamation 1006, Pakistan Cabinet Division) as of mid-2026. Islamic
+-- calendar dates (Eid-ul-Fitr, Eid-ul-Adha, Ashura, Eid Milad-un-Nabi) are
+-- moon-sighting dependent and can shift by a day from what's listed here —
+-- correct them in-app on the Team Calendar page if the official
+-- announcement differs, no redeploy needed. ON CONFLICT DO NOTHING makes
+-- re-running this file safe.
+-- ---------------------------------------------------------------------------
+insert into holidays (country, name, date) values
+  ('US', 'New Year''s Day', '2026-01-01'),
+  ('US', 'Martin Luther King Jr. Day', '2026-01-19'),
+  ('US', 'Washington''s Birthday (Presidents Day)', '2026-02-16'),
+  ('US', 'Memorial Day', '2026-05-25'),
+  ('US', 'Juneteenth National Independence Day', '2026-06-19'),
+  ('US', 'Independence Day (observed)', '2026-07-03'),
+  ('US', 'Independence Day', '2026-07-04'),
+  ('US', 'Labor Day', '2026-09-07'),
+  ('US', 'Columbus Day', '2026-10-12'),
+  ('US', 'Veterans Day', '2026-11-11'),
+  ('US', 'Thanksgiving Day', '2026-11-26'),
+  ('US', 'Christmas Day', '2026-12-25'),
+
+  ('PH', 'New Year''s Day', '2026-01-01'),
+  ('PH', 'Chinese New Year', '2026-02-17'),
+  ('PH', 'Maundy Thursday', '2026-04-02'),
+  ('PH', 'Good Friday', '2026-04-03'),
+  ('PH', 'Black Saturday', '2026-04-04'),
+  ('PH', 'Araw ng Kagitingan', '2026-04-09'),
+  ('PH', 'Labor Day', '2026-05-01'),
+  ('PH', 'Independence Day', '2026-06-12'),
+  ('PH', 'Ninoy Aquino Day', '2026-08-21'),
+  ('PH', 'National Heroes Day', '2026-08-31'),
+  ('PH', 'All Saints'' Day', '2026-11-01'),
+  ('PH', 'All Souls'' Day', '2026-11-02'),
+  ('PH', 'Bonifacio Day', '2026-11-30'),
+  ('PH', 'Feast of the Immaculate Conception', '2026-12-08'),
+  ('PH', 'Christmas Eve', '2026-12-24'),
+  ('PH', 'Christmas Day', '2026-12-25'),
+  ('PH', 'Rizal Day', '2026-12-30'),
+  ('PH', 'Last Day of the Year', '2026-12-31'),
+
+  ('PK', 'Kashmir Day', '2026-02-05'),
+  ('PK', 'Eid-ul-Fitr (Day 1)', '2026-03-21'),
+  ('PK', 'Eid-ul-Fitr (Day 2)', '2026-03-22'),
+  ('PK', 'Eid-ul-Fitr (Day 3)', '2026-03-23'),
+  ('PK', 'Pakistan Day', '2026-03-23'),
+  ('PK', 'Labour Day', '2026-05-01'),
+  ('PK', 'Eid-ul-Adha (Day 1)', '2026-05-27'),
+  ('PK', 'Eid-ul-Adha (Day 2)', '2026-05-28'),
+  ('PK', 'Eid-ul-Adha (Day 3)', '2026-05-29'),
+  ('PK', 'Ashura (9th Muharram)', '2026-06-25'),
+  ('PK', 'Ashura (10th Muharram)', '2026-06-26'),
+  ('PK', 'Independence Day', '2026-08-14'),
+  ('PK', 'Eid Milad-un-Nabi', '2026-11-09'),
+  ('PK', 'Iqbal Day', '2026-11-09'),
+  ('PK', 'Quaid-e-Azam Day', '2026-12-25')
+on conflict (country, name, date) do nothing;
+
+-- RLS for the two new tables (same pattern as everything above).
+alter table holidays enable row level security;
+alter table leave_requests enable row level security;
+
+drop policy if exists "avenue7 read holidays" on holidays;
+create policy "avenue7 read holidays" on holidays for select using (is_avenue7_user());
+drop policy if exists "avenue7 write holidays" on holidays;
+create policy "avenue7 write holidays" on holidays for all using (is_avenue7_user()) with check (is_avenue7_user());
+
+drop policy if exists "avenue7 read leave_requests" on leave_requests;
+create policy "avenue7 read leave_requests" on leave_requests for select using (is_avenue7_user());
+drop policy if exists "avenue7 write leave_requests" on leave_requests;
+create policy "avenue7 write leave_requests" on leave_requests for all using (is_avenue7_user()) with check (is_avenue7_user());
+
+-- ---------------------------------------------------------------------------
+-- By Product page: manual ASIN tag overrides. Most tasks get their ASIN
+-- parsed straight out of the Jira title (see src/lib/asin.ts), but titles
+-- that don't contain a recognizable ASIN land in "No ASIN Detected" — this
+-- table lets someone manually tag one of those tasks to a real product so
+-- it groups correctly. Keyed by issue_key so it survives Jira resyncs.
+-- ---------------------------------------------------------------------------
+create table if not exists task_asin_overrides (
+  issue_key text primary key,
+  asin text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table task_asin_overrides enable row level security;
+drop policy if exists "avenue7 read task_asin_overrides" on task_asin_overrides;
+create policy "avenue7 read task_asin_overrides" on task_asin_overrides for select using (is_avenue7_user());
+drop policy if exists "avenue7 write task_asin_overrides" on task_asin_overrides;
+create policy "avenue7 write task_asin_overrides" on task_asin_overrides for all using (is_avenue7_user()) with check (is_avenue7_user());
+
+drop trigger if exists task_asin_overrides_set_updated_at on task_asin_overrides;
+create trigger task_asin_overrides_set_updated_at before update on task_asin_overrides
+  for each row execute procedure set_updated_at();
