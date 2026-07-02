@@ -3,23 +3,29 @@ import { authHeader } from "@/lib/jira";
 
 const SITE = process.env.JIRA_SITE || "ave7.atlassian.net";
 
-// Atlassian hosts avatars in a couple of places: the Jira site itself
-// (default/generated avatars — these require the same auth as the REST API)
-// and its public avatar CDN (custom-uploaded photos — technically public,
-// but we proxy those too for a consistent, same-origin <img src>).
-const ALLOWED_HOSTS = new Set([
-  SITE,
-  "avatar-management--avatars.us-east-1.prod.public.atl-paas.net",
-  "secure.gravatar.com",
-]);
+function isAllowedHost(hostname: string) {
+  return (
+    hostname === SITE ||
+    hostname.endsWith(".atlassian.net") ||
+    hostname.endsWith(".atl-paas.net") ||
+    hostname.endsWith("gravatar.com")
+  );
+}
 
 /**
  * Proxies Jira avatar images through the server so the browser never needs
  * its own Jira session/credentials to render them. Without this, only
- * people with a custom-uploaded photo (served from Atlassian's public CDN)
- * would show a real picture — everyone on Jira's default generated avatar
- * (served from the Jira site itself, which is auth-gated) would 403 and
- * silently fall back to initials.
+ * people with a custom-uploaded photo (served from Atlassian's public
+ * avatar CDN, whatever its exact subdomain happens to be) would show a real
+ * picture — everyone on Jira's default generated avatar (served from the
+ * Jira site itself, which IS auth-gated) would 403 and silently fall back
+ * to initials.
+ *
+ * Host matching is suffix-based (*.atlassian.net / *.atl-paas.net /
+ * gravatar.com) rather than an exact-hostname allowlist — an earlier
+ * version hardcoded one guessed CDN hostname, which rejected every photo
+ * that didn't match it exactly (a regression: those photos loaded fine
+ * before this proxy existed, since there was no allowlist at all then).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { url } = req.query;
@@ -36,15 +42,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  if (!ALLOWED_HOSTS.has(target.hostname)) {
+  if (!isAllowedHost(target.hostname)) {
     res.status(400).json({ error: "Host not allowed" });
     return;
   }
 
+  // Only the Jira site itself needs our API credentials — its default
+  // generated avatars live behind the same auth as the rest of the REST
+  // API. The avatar CDN and Gravatar are already public; attaching an
+  // unexpected Authorization header there could just as easily get the
+  // request rejected as help it.
+  const headers: Record<string, string> = { Accept: "image/*" };
+  if (target.hostname === SITE) {
+    headers.Authorization = authHeader();
+  }
+
   try {
-    const upstream = await fetch(target.toString(), {
-      headers: { Authorization: authHeader(), Accept: "image/*" },
-    });
+    const upstream = await fetch(target.toString(), { headers });
 
     if (!upstream.ok || !upstream.body) {
       res.status(upstream.status).end();

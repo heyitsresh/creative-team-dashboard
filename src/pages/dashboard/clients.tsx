@@ -8,6 +8,7 @@ import { BarList } from "@/components/charts/BarList";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { useTasks } from "@/lib/useTasks";
 import { isOpen, groupCount } from "@/lib/metrics";
+import { statusDotColor } from "@/lib/taskDisplay";
 import { LoadingState } from "@/components/ui/LoadingState";
 
 export default function Clients() {
@@ -40,7 +41,11 @@ export default function Clients() {
       }
       return row;
     });
-    return { clients, types, grid };
+    const gridMax = Math.max(
+      1,
+      ...grid.flatMap((row) => types.map((t) => Number(row[t] || 0)))
+    );
+    return { clients, types, grid, gridMax };
   }, [scoped, byClient, byContentType]);
 
   if (isLoading) {
@@ -101,42 +106,82 @@ export default function Clients() {
       </div>
 
       <Card>
-        <h2 className="font-semibold mb-4">Client × content type</h2>
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="font-semibold">Client × content type</h2>
+          <span className="text-xs text-muted">Darker = more tasks</span>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
-              <tr className="text-left border-b border-line">
-                <th className="py-2 pr-4 label-caps font-normal">Client</th>
+              <tr className="text-left">
+                <th className="py-2.5 pr-4 label-caps font-normal sticky left-0 bg-white">
+                  Client
+                </th>
                 {matrix.types.map((t) => (
-                  <th key={t} className="py-2 px-3 label-caps font-normal text-right">
-                    {t}
+                  <th key={t} className="py-2.5 px-3 label-caps font-normal text-right whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: statusDotColor(t) }}
+                      />
+                      {t}
+                    </span>
                   </th>
                 ))}
-                <th className="py-2 pl-3 label-caps font-normal text-right">Total</th>
+                <th className="py-2.5 pl-3 label-caps font-normal text-right sticky right-0 bg-white">
+                  Total
+                </th>
               </tr>
             </thead>
             <tbody>
-              {matrix.grid.map((row) => {
+              {matrix.grid.map((row, i) => {
                 const total = matrix.types.reduce(
                   (s, t) => s + Number(row[t] || 0),
                   0
                 );
                 return (
-                  <tr key={row.client as string} className="border-b border-line/60 hover:bg-paper/60 transition-colors">
-                    <td className="py-2.5 pr-4">
+                  <tr
+                    key={row.client as string}
+                    className={i % 2 === 1 ? "bg-paper/40" : ""}
+                  >
+                    <td className="py-2.5 pr-4 border-t border-line/60 sticky left-0 bg-inherit">
                       <Link
                         href={`/dashboard/health?client=${encodeURIComponent(row.client as string)}`}
-                        className="font-medium hover:text-primary hover:underline transition-colors"
+                        className="font-medium hover:text-primary hover:underline transition-colors whitespace-nowrap"
                       >
                         {row.client}
                       </Link>
                     </td>
-                    {matrix.types.map((t) => (
-                      <td key={t} className="py-2.5 px-3 text-right text-ink/70">
-                        {row[t] || "–"}
-                      </td>
-                    ))}
-                    <td className="py-2.5 pl-3 text-right font-semibold">{total}</td>
+                    {matrix.types.map((t) => {
+                      const value = Number(row[t] || 0);
+                      const intensity = value / matrix.gridMax;
+                      return (
+                        <td
+                          key={t}
+                          className="py-2.5 px-3 text-right border-t border-line/60 transition-colors"
+                          style={
+                            value > 0
+                              ? { backgroundColor: `rgba(108, 92, 231, ${0.08 + intensity * 0.32})` }
+                              : undefined
+                          }
+                        >
+                          <span
+                            className={
+                              value > 0
+                                ? intensity > 0.5
+                                  ? "font-semibold text-primary-dark"
+                                  : "font-medium text-ink/80"
+                                : "text-ink/25"
+                            }
+                          >
+                            {value || "–"}
+                          </span>
+                        </td>
+                      );
+                    })}
+                    <td className="py-2.5 pl-3 text-right font-semibold border-t border-line/60 sticky right-0 bg-inherit">
+                      {total}
+                    </td>
                   </tr>
                 );
               })}

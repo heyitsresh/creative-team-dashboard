@@ -79,10 +79,24 @@ export default function ClientHealthPage() {
       ? Math.round(openTasks.reduce((s, t) => s + t.hoursInQueue, 0) / openTasks.length / 24)
       : 0;
 
-    // Who's actually touching this client's work, and which of their teams
-    // that pulls in — lets you glance at "who do I talk to about this
-    // client" without hunting through the org chart.
+    // First figure out which team(s) actually have a ticket on this client
+    // — then show that team's FULL roster (creative manager, listing
+    // specialist, designer, video editor, everyone), not just whoever
+    // happens to already have a Jira task here. A designer with 0 tasks on
+    // this client yet is still "the designer for this client."
+    const teamIdsWithWork = new Set(
+      members
+        .filter((m) =>
+          clientTasks.some(
+            (t) => m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
+          )
+        )
+        .map((m) => m.team_id)
+        .filter(Boolean)
+    );
+    const teamsOnClient = teams.filter((t) => teamIdsWithWork.has(t.id));
     const peopleOnClient = members
+      .filter((m) => teamIdsWithWork.has(m.team_id))
       .map((m) => {
         const mine = clientTasks.filter(
           (t) => m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
@@ -95,11 +109,7 @@ export default function ClientHealthPage() {
           avatarUrl: mine.find((t) => t.assigneeAvatarUrl)?.assigneeAvatarUrl,
         };
       })
-      .filter((p) => p.count > 0)
-      .sort((a, b) => b.count - a.count);
-    const teamsOnClient = teams.filter((t) =>
-      peopleOnClient.some((p) => p.member.team_id === t.id)
-    );
+      .sort((a, b) => b.count - a.count || a.member.sort_order - b.member.sort_order);
 
     return (
       <DashboardLayout>

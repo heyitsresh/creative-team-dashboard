@@ -36,11 +36,14 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex w-64 shrink-0 h-screen sticky top-0 flex-col bg-sidebar text-white">
-      <div className="flex items-center gap-2 px-6 h-16 shrink-0">
-        <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-bold">
+      <div className="flex items-center gap-3 px-6 py-5 shrink-0">
+        <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-bold shrink-0">
           A7
         </div>
-        <span className="font-semibold text-sm tracking-tight">Avenue7</span>
+        <div className="leading-tight min-w-0">
+          <p className="font-semibold text-sm tracking-tight truncate">Avenue7Media</p>
+          <p className="text-[11px] text-white/50 truncate">Creative Dashboard</p>
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-0.5">

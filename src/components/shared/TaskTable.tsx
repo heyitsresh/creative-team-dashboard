@@ -6,10 +6,11 @@ import { Pill } from "@/components/ui/Card";
 import { Avatar } from "@/components/ui/Avatar";
 
 /**
- * Hyperlinked, line-per-task table shared by the by-person queue (Team page)
- * and the by-client queue (Client Health drilldown) — same columns either
- * way, just swapping which identity column ("Client" vs "Assignee") shows
- * since the other one is already implied by the page you're on.
+ * Hyperlinked, line-per-task table shared by the by-person queue (Team
+ * page), the by-client queue (Client Health drilldown), and the full task
+ * list (Task Status → List view). `identityColumn` picks which identity
+ * column(s) to show — "both" is for the full list where neither person nor
+ * client is already implied by the page you're on.
  */
 export function TaskTable({
   tasks,
@@ -18,8 +19,11 @@ export function TaskTable({
 }: {
   tasks: NormalizedTask[];
   rules: SlaRule[];
-  identityColumn: "client" | "assignee";
+  identityColumn: "client" | "assignee" | "both";
 }) {
+  const showClient = identityColumn === "client" || identityColumn === "both";
+  const showAssignee = identityColumn === "assignee" || identityColumn === "both";
+
   const rows = [...tasks].sort((a, b) => {
     const aOver = isBreached(a, rules) ? 1 : 0;
     const bOver = isBreached(b, rules) ? 1 : 0;
@@ -35,9 +39,8 @@ export function TaskTable({
             <th className="py-2 pr-3">Task</th>
             <th className="py-2 px-3">Status</th>
             <th className="py-2 px-3">Priority</th>
-            <th className="py-2 px-3">
-              {identityColumn === "client" ? "Client" : "Assignee"}
-            </th>
+            {showClient && <th className="py-2 px-3">Client</th>}
+            {showAssignee && <th className="py-2 px-3">Assignee</th>}
             <th className="py-2 px-3">Content type</th>
             <th className="py-2 px-3 text-right">Days running</th>
             <th className="py-2 px-3">Due date</th>
@@ -84,9 +87,9 @@ export function TaskTable({
                     "—"
                   )}
                 </td>
-                <td className="py-2.5 px-3 text-ink/70">
-                  {identityColumn === "client" ? (
-                    t.client ? (
+                {showClient && (
+                  <td className="py-2.5 px-3 text-ink/70">
+                    {t.client ? (
                       <Link
                         href={`/dashboard/health?client=${encodeURIComponent(t.client)}`}
                         className="hover:text-primary hover:underline transition-colors"
@@ -95,19 +98,24 @@ export function TaskTable({
                       </Link>
                     ) : (
                       "—"
-                    )
-                  ) : t.assigneeEmail ? (
-                    <Link
-                      href={`/dashboard/queue?person=${encodeURIComponent(t.assigneeEmail)}`}
-                      className="flex items-center gap-2 hover:text-primary transition-colors"
-                    >
-                      <Avatar name={t.assigneeName || "?"} src={t.assigneeAvatarUrl} size={20} />
-                      <span className="whitespace-nowrap">{t.assigneeName || t.assigneeEmail}</span>
-                    </Link>
-                  ) : (
-                    t.assigneeName || "Unassigned"
-                  )}
-                </td>
+                    )}
+                  </td>
+                )}
+                {showAssignee && (
+                  <td className="py-2.5 px-3 text-ink/70">
+                    {t.assigneeEmail ? (
+                      <Link
+                        href={`/dashboard/queue?person=${encodeURIComponent(t.assigneeEmail)}`}
+                        className="flex items-center gap-2 hover:text-primary transition-colors"
+                      >
+                        <Avatar name={t.assigneeName || "?"} src={t.assigneeAvatarUrl} size={20} />
+                        <span className="whitespace-nowrap">{t.assigneeName || t.assigneeEmail}</span>
+                      </Link>
+                    ) : (
+                      t.assigneeName || "Unassigned"
+                    )}
+                  </td>
+                )}
                 <td className="py-2.5 px-3">
                   <Pill colorKey={t.contentType}>{t.contentType}</Pill>
                 </td>
@@ -126,7 +134,10 @@ export function TaskTable({
           })}
           {rows.length === 0 && (
             <tr>
-              <td className="py-6 text-muted" colSpan={9}>
+              <td
+                className="py-6 text-muted"
+                colSpan={8 + (showClient ? 1 : 0) + (showAssignee ? 1 : 0)}
+              >
                 No tasks to show.
               </td>
             </tr>

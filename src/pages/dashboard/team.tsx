@@ -86,7 +86,13 @@ export default function TeamPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
-        <StatCard label="Open tasks" value={scopedOpen.length} icon={ListTodo} gradient="violet" />
+        <StatCard
+          label="Open tasks"
+          value={scopedOpen.length}
+          icon={ListTodo}
+          gradient="violet"
+          href="/dashboard/status"
+        />
         <StatCard
           label="Overdue"
           value={breached.length}
