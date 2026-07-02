@@ -4,6 +4,7 @@ import { AlertTriangle, Clock, Building2, Users2 } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill, StatCard } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CountUp } from "@/components/ui/CountUp";
 import { useTasks, useSlaRules } from "@/lib/useTasks";
 import { isOpen, isBreached, slaHoursFor } from "@/lib/metrics";
 import { useAutosave } from "@/lib/useAutosave";
@@ -40,8 +41,7 @@ export default function AlertsPage() {
         description="Open tasks that have blown past their turnaround SLA, worst first."
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
-        <StatCard label="Total breaches" value={breaches.length} icon={AlertTriangle} gradient="pink" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 stagger">
         <StatCard
           label="Worst overage (h)"
           value={breaches[0] ? Math.round(breaches[0].overBy) : 0}
@@ -65,15 +65,28 @@ export default function AlertsPage() {
         />
       </div>
 
-      <div className="flex flex-col gap-3 stagger">
-        {breaches.map(({ task, budget, overBy }) => (
-          <AlertRow key={task.key} task={task} budget={budget} overBy={overBy} />
-        ))}
-        {breaches.length === 0 && (
-          <Card>
-            <p className="text-sm text-muted">Nothing breached — the queue is within SLA.</p>
-          </Card>
-        )}
+      <div className="rounded-card overflow-hidden shadow-card mb-6">
+        <div className="bg-gradient-to-br from-[#E0529C] to-[#B8285F] text-white px-6 py-5 flex items-center gap-4">
+          <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <AlertTriangle size={22} />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white/80">Total breaches</p>
+            <p className="text-3xl font-bold tracking-tight">
+              <CountUp value={breaches.length} />
+            </p>
+          </div>
+        </div>
+        <div className="bg-paper/60 p-4 flex flex-col gap-3">
+          {breaches.map(({ task, budget, overBy }) => (
+            <AlertRow key={task.key} task={task} budget={budget} overBy={overBy} />
+          ))}
+          {breaches.length === 0 && (
+            <p className="text-sm text-muted px-2 py-4">
+              Nothing breached — the queue is within SLA.
+            </p>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

@@ -25,7 +25,9 @@ export function TaskCard({
     >
       <div className="flex items-center justify-between mb-2.5">
         <Pill colorKey={task.contentType}>{task.contentType}</Pill>
-        {breached && <Pill tone="danger">Overdue</Pill>}
+        {breached && (
+          <span className="pill bg-red-800 text-white font-semibold">Overdue</span>
+        )}
       </div>
 
       <p className="text-sm font-medium text-ink leading-snug line-clamp-2 mb-1">

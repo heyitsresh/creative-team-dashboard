@@ -1,0 +1,39 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+// GET  -> { overrides }  (issue_key -> asin map, source for the By Product page)
+// POST -> { issue_key, asin }  (upsert; manual tag from the By Product page)
+// DELETE -> { issue_key }  (clear a manual tag, fall back to auto-detected ASIN)
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const admin = supabaseAdmin();
+
+  if (req.method === "GET") {
+    const { data, error } = await admin.from("task_asin_overrides").select("*");
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ overrides: data });
+  }
+
+  if (req.method === "POST") {
+    const { issue_key, asin } = req.body || {};
+    if (!issue_key || !asin) {
+      return res.status(400).json({ error: "issue_key and asin are required" });
+    }
+    const { data, error } = await admin
+      .from("task_asin_overrides")
+      .upsert({ issue_key, asin })
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ data });
+  }
+
+  if (req.method === "DELETE") {
+    const { issue_key } = req.body || {};
+    const { error } = await admin.from("task_asin_overrides").delete().eq("issue_key", issue_key);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true });
+  }
+
+  res.setHeader("Allow", "GET, POST, DELETE");
+  return res.status(405).json({ error: "Method not allowed" });
+}

@@ -3,18 +3,12 @@ import { ListTodo, AlertTriangle, Users2, Layers, ArrowUpRight } from "lucide-re
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, StatCard } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { BarList } from "@/components/charts/BarList";
+import { VerticalBarChart } from "@/components/charts/VerticalBarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
 import { Avatar } from "@/components/ui/Avatar";
 import { useTasks, useSlaRules, useTeamData } from "@/lib/useTasks";
-import { isOpen, isBreached, groupCount } from "@/lib/metrics";
+import { isOpen, isBreached, groupCount, taskMatchesMember } from "@/lib/metrics";
 import { LoadingState } from "@/components/ui/LoadingState";
-import type { NormalizedTask, TeamMember } from "@/types";
-
-function matches(member: TeamMember, task: NormalizedTask) {
-  if (!member.jira_email || !task.assigneeEmail) return false;
-  return member.jira_email.toLowerCase() === task.assigneeEmail.toLowerCase();
-}
 
 export default function Overview() {
   const { tasks, isLoading } = useTasks();
@@ -38,7 +32,7 @@ export default function Overview() {
   // have one — click one to jump straight to their slice of the queue.
   const peopleByLoad = members
     .map((m) => {
-      const mine = open.filter((t) => matches(m, t));
+      const mine = open.filter((t) => taskMatchesMember(t, m));
       return {
         member: m,
         count: mine.length,
@@ -99,9 +93,8 @@ export default function Overview() {
               <ArrowUpRight size={16} />
             </Link>
           </div>
-          <BarList
-            data={byClient}
-            max={8}
+          <VerticalBarChart
+            data={byClient.slice(0, 20)}
             getHref={(d) => `/dashboard/health?client=${encodeURIComponent(d.name)}`}
           />
           <Link

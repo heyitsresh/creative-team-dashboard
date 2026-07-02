@@ -14,6 +14,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 export default function Clients() {
   const { tasks, isLoading } = useTasks();
   const [onlyOpen, setOnlyOpen] = useState(true);
+  const [donutClient, setDonutClient] = useState<string>("all");
 
   const scoped = useMemo(
     () => (onlyOpen ? tasks.filter(isOpen) : tasks),
@@ -28,6 +29,16 @@ export default function Clients() {
     () => groupCount(scoped, (t) => t.contentType),
     [scoped]
   );
+  // Scoped down to one client for the donut when picked — lets you see
+  // "what kind of work is this client's queue made of" without leaving the
+  // page or losing the company-wide chart on the left.
+  const byContentTypeForClient = useMemo(() => {
+    if (donutClient === "all") return byContentType;
+    return groupCount(
+      scoped.filter((t) => (t.client || "No client") === donutClient),
+      (t) => t.contentType
+    );
+  }, [scoped, byContentType, donutClient]);
 
   const matrix = useMemo(() => {
     const clients = byClient.map((c) => c.name);
@@ -100,8 +111,33 @@ export default function Clients() {
           />
         </Card>
         <Card>
-          <h2 className="font-semibold mb-4">Tasks per content type</h2>
-          <DonutChart data={byContentType} />
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h2 className="font-semibold">Tasks per content type</h2>
+            <select
+              value={donutClient}
+              onChange={(e) => setDonutClient(e.target.value)}
+              className="border border-line rounded-pill pl-3 pr-7 py-1.5 text-xs bg-white font-medium text-ink focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition cursor-pointer max-w-[140px]"
+            >
+              <option value="all">All clients</option>
+              {byClient.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {donutClient !== "all" && (
+            <p className="text-xs text-muted -mt-2 mb-3">
+              Showing {donutClient} only ·{" "}
+              <button
+                onClick={() => setDonutClient("all")}
+                className="text-primary font-medium hover:underline"
+              >
+                Clear
+              </button>
+            </p>
+          )}
+          <DonutChart data={byContentTypeForClient} />
         </Card>
       </div>
 

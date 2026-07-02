@@ -72,3 +72,25 @@ export interface Client {
   logo_path: string | null;
   sort_order: number;
 }
+
+export interface Holiday {
+  id: string;
+  country: "US" | "PH" | "PK" | string;
+  name: string;
+  date: string; // YYYY-MM-DD
+}
+
+export interface LeaveRequest {
+  id: string;
+  team_member_id: string | null;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD
+  reason: string | null;
+  created_at: string;
+}
+
+export interface AsinOverride {
+  issue_key: string;
+  asin: string;
+  updated_at: string;
+}

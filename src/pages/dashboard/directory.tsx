@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, Globe, Trash2 } from "lucide-react";
+import { Search, Globe, Trash2, Pencil, Check } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -15,12 +15,29 @@ const PRIORITY_TONE: Record<string, string> = {
   LOW: "bg-line text-ink/70",
 };
 
+// Controlled vocabulary going forward — the sheet this was seeded from had
+// free text ("HIGH PRIORITY", "HIGH", "Med Priority", …), which made the
+// data inconsistent and impossible to filter/tag cleanly. New edits always
+// write one of these four canonical values; legacy free-text values still
+// display fine (priorityTone() below fuzzy-matches on substring), they just
+// get normalized the moment someone re-saves that field via the dropdown.
+const PRIORITY_OPTIONS = ["High priority", "Medium priority", "Low priority", "Maintenance"];
+
 function priorityTone(priority: string | null) {
   const p = (priority ?? "").toUpperCase();
   if (p.includes("HIGH")) return PRIORITY_TONE.HIGH;
   if (p.includes("MED")) return PRIORITY_TONE.MED;
   if (p.includes("LOW") || p.includes("MAINTENANCE")) return PRIORITY_TONE.LOW;
   return "bg-line text-ink/70";
+}
+
+function canonicalPriority(priority: string | null) {
+  const p = (priority ?? "").toUpperCase();
+  if (p.includes("HIGH")) return "High priority";
+  if (p.includes("MED")) return "Medium priority";
+  if (p.includes("MAINTENANCE")) return "Maintenance";
+  if (p.includes("LOW")) return "Low priority";
+  return "";
 }
 
 // Best-effort open-task count: the sheet's brand names ("Pendleton") don't
@@ -180,49 +197,114 @@ function ClientCard({
   onRemove: () => void;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const teamName = teams.find((t) => t.id === client.team_id)?.name;
+  const websiteHref = client.website ? client.website.trim().split(/\s+/)[0] : null;
 
-  return (
-    <Card className="flex flex-col gap-3">
-      <div className="flex items-start gap-3">
-        {client.logo_path && !imgFailed ? (
-          <img
-            src={client.logo_path}
-            alt={client.name}
-            onError={() => setImgFailed(true)}
-            className="h-12 w-12 rounded-lg object-contain bg-white border border-line shrink-0 p-1"
-          />
-        ) : (
-          <div className="h-12 w-12 rounded-lg bg-primary-light flex items-center justify-center text-primary font-semibold text-sm shrink-0">
-            {client.name.slice(0, 2).toUpperCase()}
+  const logo =
+    client.logo_path && !imgFailed ? (
+      <img
+        src={client.logo_path}
+        alt={client.name}
+        onError={() => setImgFailed(true)}
+        className="h-12 w-12 rounded-lg object-contain bg-white border border-line shrink-0 p-1"
+      />
+    ) : (
+      <div className="h-12 w-12 rounded-lg bg-primary-light flex items-center justify-center text-primary font-semibold text-sm shrink-0">
+        {client.name.slice(0, 2).toUpperCase()}
+      </div>
+    );
+
+  if (!editing) {
+    return (
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          {logo}
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm truncate">{client.name}</p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className={`pill text-[10px] ${priorityTone(client.priority)}`}>
+                {client.priority || "No priority"}
+              </span>
+              {teamName && <span className="text-[11px] text-muted">{teamName}</span>}
+              <span className="text-[11px] text-muted">{openCount} open</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => setEditing(true)}
+              className="text-muted hover:text-primary transition-colors"
+              title="Edit brand"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={onRemove}
+              className="text-muted hover:text-tag-pink-text transition-colors"
+              title="Remove brand"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+
+        {(client.category || websiteHref || client.priority_note) && (
+          <div className="text-xs text-ink/70 flex flex-col gap-1.5">
+            {client.category && <p>{client.category}</p>}
+            {websiteHref && (
+              <a
+                href={websiteHref}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1 w-fit"
+              >
+                <Globe size={11} /> {websiteHref.replace(/^https?:\/\//, "")}
+              </a>
+            )}
+            {client.priority_note && (
+              <p className="text-muted line-clamp-2">{client.priority_note}</p>
+            )}
           </div>
         )}
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="flex flex-col gap-3 ring-2 ring-primary/20">
+      <div className="flex items-start gap-3">
+        {logo}
         <div className="flex-1 min-w-0">
           <input
             defaultValue={client.name}
             onChange={(e) => onSave({ name: e.target.value })}
             className="font-semibold text-sm bg-transparent outline-none border-b border-transparent focus:border-primary/40 w-full transition-colors"
           />
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`pill text-[10px] ${priorityTone(client.priority)}`}>
-              {client.priority ?? "No priority"}
-            </span>
-            <span className="text-[11px] text-muted">{openCount} open</span>
-          </div>
+          <span className="text-[11px] text-muted">{openCount} open</span>
         </div>
-        <button
-          onClick={onRemove}
-          className="text-muted hover:text-tag-pink-text transition-colors shrink-0"
-          title="Remove brand"
-        >
-          <Trash2 size={14} />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => setEditing(false)}
+            className="text-primary hover:text-primary-dark transition-colors"
+            title="Done editing"
+          >
+            <Check size={16} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="text-muted hover:text-tag-pink-text transition-colors"
+            title="Remove brand"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs">
         <select
           defaultValue={client.team_id ?? ""}
           onChange={(e) => onSave({ team_id: e.target.value || null })}
-          className="border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition col-span-1"
+          className="border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
         >
           <option value="">No team</option>
           {teams.map((t) => (
@@ -231,12 +313,18 @@ function ClientCard({
             </option>
           ))}
         </select>
-        <input
-          defaultValue={client.priority ?? ""}
-          placeholder="Priority"
-          onChange={(e) => onSave({ priority: e.target.value })}
+        <select
+          defaultValue={canonicalPriority(client.priority)}
+          onChange={(e) => onSave({ priority: e.target.value || null })}
           className="border border-line rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
-        />
+        >
+          <option value="">No priority</option>
+          {PRIORITY_OPTIONS.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
         <input
           defaultValue={client.category ?? ""}
           placeholder="Category"
@@ -251,16 +339,6 @@ function ClientCard({
             onChange={(e) => onSave({ website: e.target.value })}
             className="flex-1 min-w-0 outline-none bg-transparent"
           />
-          {client.website && (
-            <a
-              href={client.website.trim().split(/\s+/)[0]}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary shrink-0 hover:underline"
-            >
-              Visit
-            </a>
-          )}
         </div>
         <textarea
           defaultValue={client.priority_note ?? ""}

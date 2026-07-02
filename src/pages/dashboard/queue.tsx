@@ -6,23 +6,11 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, Pill } from "@/components/ui/Card";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useTasks, useTeamData, useSlaRules } from "@/lib/useTasks";
-import { isOpen, isBreached, slaHoursFor, standardHoursFor } from "@/lib/metrics";
+import { isOpen, isBreached, slaHoursFor, standardHoursFor, taskMatchesMember } from "@/lib/metrics";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { Avatar } from "@/components/ui/Avatar";
+import { statusDotColor } from "@/lib/taskDisplay";
 import type { NormalizedTask, TeamMember } from "@/types";
-
-// Open tasks only ever land in these two status categories — "done" is
-// excluded from "open" by definition. Colors intentionally echo the Kanban
-// board so a bar segment and a board column read the same way.
-const CATEGORY_ORDER: Array<"new" | "indeterminate"> = ["new", "indeterminate"];
-const CATEGORY_BAR_COLOR: Record<string, string> = {
-  new: "bg-muted",
-  indeterminate: "bg-primary",
-};
-const CATEGORY_LEGEND_LABEL: Record<string, string> = {
-  new: "To do",
-  indeterminate: "In progress",
-};
 
 export default function QueuePage() {
   const { tasks, isLoading: tasksLoading } = useTasks();
@@ -42,20 +30,26 @@ export default function QueuePage() {
 
   const open = useMemo(() => tasks.filter(isOpen), [tasks]);
 
+  // Real Jira statuses present in the open queue right now (To Do, In
+  // Progress, On Hold, Uploading, Internal QA, Client QA, Revisions, …) —
+  // used to break each person's bar down by actual status instead of just
+  // Jira's coarse new/indeterminate category, which used to lump On Hold,
+  // Client QA, Uploading, etc. all into one "in progress" segment.
+  const openStatuses = useMemo(
+    () => Array.from(new Set(open.map((t) => t.status))).sort(),
+    [open]
+  );
+
   const workload = useMemo(() => {
     return members
       .map((m: TeamMember) => {
-        const mine = open.filter(
-          (t: NormalizedTask) =>
-            m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
-        );
+        const mine = open.filter((t: NormalizedTask) => taskMatchesMember(t, m));
         const estimatedHours = mine.reduce((s, t) => s + standardHoursFor(t, rules), 0);
         const weeklyCapacity = m.weekly_capacity_hours || 40;
         const overdueCount = mine.filter((t) => isBreached(t, rules)).length;
-        const hoursByCategory: Record<string, number> = {};
+        const hoursByStatus: Record<string, number> = {};
         for (const t of mine) {
-          hoursByCategory[t.statusCategory] =
-            (hoursByCategory[t.statusCategory] || 0) + standardHoursFor(t, rules);
+          hoursByStatus[t.status] = (hoursByStatus[t.status] || 0) + standardHoursFor(t, rules);
         }
         return {
           member: m,
@@ -64,7 +58,7 @@ export default function QueuePage() {
           weeklyCapacity,
           utilization: weeklyCapacity > 0 ? estimatedHours / weeklyCapacity : 0,
           overdueCount,
-          hoursByCategory,
+          hoursByStatus,
         };
       })
       .sort((a, b) => b.utilization - a.utilization);
@@ -75,11 +69,8 @@ export default function QueuePage() {
     : null;
 
   const scopedOpen = useMemo(
-    () =>
-      personFilter
-        ? open.filter((t) => t.assigneeEmail?.toLowerCase() === personFilter)
-        : open,
-    [open, personFilter]
+    () => (filteredMember ? open.filter((t) => taskMatchesMember(t, filteredMember)) : open),
+    [open, filteredMember]
   );
 
   const queueRows = useMemo(() => {
@@ -131,17 +122,16 @@ export default function QueuePage() {
       <Card className="mb-6">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="font-semibold">Workload vs. available time, per person</h2>
-          <div className="flex items-center gap-4 text-xs text-muted">
-            {CATEGORY_ORDER.map((cat) => (
-              <span key={cat} className="flex items-center gap-1.5">
-                <span className={`h-2 w-2 rounded-full ${CATEGORY_BAR_COLOR[cat]}`} />
-                {CATEGORY_LEGEND_LABEL[cat]}
+          <div className="flex items-center gap-3 text-xs text-muted flex-wrap max-w-md justify-end">
+            {openStatuses.map((s) => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: statusDotColor(s) }}
+                />
+                {s}
               </span>
             ))}
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-tag-pink-text" />
-              Overdue (of the above)
-            </span>
           </div>
         </div>
         <div className="flex flex-col gap-1 stagger">
@@ -153,10 +143,11 @@ export default function QueuePage() {
               weeklyCapacity,
               utilization,
               overdueCount,
-              hoursByCategory,
+              hoursByStatus,
             }) => {
               const isActive = personFilter && member.jira_email?.toLowerCase() === personFilter;
               const barWidth = Math.min(100, utilization * 100);
+              const overduePct = taskCount > 0 ? (overdueCount / taskCount) * 100 : 0;
               return (
                 <Link
                   key={member.id}
@@ -176,29 +167,42 @@ export default function QueuePage() {
                       className="h-full flex rounded-full overflow-hidden transition-all duration-500"
                       style={{ width: `${barWidth}%` }}
                     >
-                      {CATEGORY_ORDER.map((cat) => {
-                        const catHours = hoursByCategory[cat] || 0;
-                        const pct = estimatedHours > 0 ? (catHours / estimatedHours) * 100 : 0;
+                      {openStatuses.map((s) => {
+                        const statusHours = hoursByStatus[s] || 0;
+                        const pct = estimatedHours > 0 ? (statusHours / estimatedHours) * 100 : 0;
                         if (pct <= 0) return null;
                         return (
                           <div
-                            key={cat}
-                            className={CATEGORY_BAR_COLOR[cat]}
-                            style={{ width: `${pct}%` }}
+                            key={s}
+                            style={{ width: `${pct}%`, backgroundColor: statusDotColor(s) }}
                           />
                         );
                       })}
                     </div>
                   </div>
-                  <span className="w-48 text-right text-muted flex items-center justify-end gap-1.5">
-                    <span className="whitespace-nowrap">
-                      {Math.round(estimatedHours)}h / {weeklyCapacity}h ({taskCount})
+                  <span className="whitespace-nowrap text-muted">
+                    {Math.round(estimatedHours)}h / {weeklyCapacity}h ({taskCount})
+                  </span>
+                  {/* Overdue shown as a filled bar out of this person's total
+                      open tasks — not just a bare count — so you can see at
+                      a glance what fraction of someone's queue is overdue,
+                      not just an absolute number floating with no scale. */}
+                  <span className="w-28 flex items-center gap-1.5 shrink-0">
+                    <span className="flex-1 h-1.5 bg-tag-pink-bg rounded-full overflow-hidden">
+                      {overdueCount > 0 && (
+                        <span
+                          className="block h-full bg-tag-pink-text rounded-full"
+                          style={{ width: `${Math.max(overduePct, 6)}%` }}
+                        />
+                      )}
                     </span>
-                    {overdueCount > 0 && (
-                      <span className="shrink-0 rounded-full bg-tag-pink-bg text-tag-pink-text text-[10px] font-semibold px-1.5 py-0.5 whitespace-nowrap">
-                        {overdueCount} overdue
-                      </span>
-                    )}
+                    <span
+                      className={`text-[10px] font-semibold whitespace-nowrap ${
+                        overdueCount > 0 ? "text-tag-pink-text" : "text-muted"
+                      }`}
+                    >
+                      {overdueCount}/{taskCount}
+                    </span>
                   </span>
                 </Link>
               );

@@ -18,25 +18,41 @@ async function fetchImage(target: string, useAuth: boolean) {
   return fetch(target, { headers });
 }
 
+// A tiny generated SVG standing in for a failed avatar fetch, showing the
+// actual HTTP status code(s) we got back. Three previous fix attempts each
+// guessed at the cause (host allowlist, auth header placement) and shipped
+// blind because a failed fetch just silently fell back to plain initials in
+// the UI — there was no way to tell WHY it failed without server log access.
+// This makes every failure self-diagnosing directly on the dashboard: the
+// little colored circle that used to just be initials will show a status
+// code instead, so we can fix the real cause on the next pass instead of
+// guessing a 4th time.
+function diagnosticSvg(label: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+    <circle cx="24" cy="24" r="24" fill="#FBE3EC"/>
+    <text x="24" y="28" font-family="monospace" font-size="11" fill="#C23B73" text-anchor="middle">${label}</text>
+  </svg>`;
+  return Buffer.from(svg);
+}
+
 /**
  * Proxies Jira avatar images through the server so the browser never needs
  * its own Jira session/credentials to render them.
  *
- * Two earlier attempts at this still left most people on initials:
- * (1) an exact-hostname allowlist that rejected CDN URLs that didn't match
- * the one guessed hostname, and (2) always attaching our API-token auth
- * header. It turns out Jira Cloud typically serves ALL avatars — default
- * generated ones included — from its public avatar CDN, not from an
- * auth-gated site endpoint; sending an unexpected Authorization header to
- * a public CDN can get the request rejected outright. So: try the request
- * unauthenticated first (right for the common case), and only fall back to
- * our Jira credentials if that fails (right for the rarer case where an
- * avatar genuinely is served from the auth-gated site itself).
+ * Three earlier attempts at this still left most people on initials, each
+ * shipped without being able to see the actual upstream error: (1) an
+ * exact-hostname allowlist that rejected CDN URLs that didn't match the one
+ * guessed hostname, (2) always attaching our API-token auth header, (3)
+ * unauthenticated-first with an authenticated fallback. If this round still
+ * doesn't fix it, the diagnosticSvg fallback below will at least show real
+ * status codes on the dashboard instead of silently falling back to
+ * initials, so the next fix is based on evidence instead of a guess.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { url } = req.query;
   if (typeof url !== "string") {
-    res.status(400).json({ error: "Missing url" });
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.status(200).send(diagnosticSvg("no-url"));
     return;
   }
 
@@ -44,36 +60,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     target = new URL(url);
   } catch {
-    res.status(400).json({ error: "Invalid url" });
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.status(200).send(diagnosticSvg("bad-url"));
     return;
   }
 
   if (!isAllowedHost(target.hostname)) {
-    res.status(400).json({ error: "Host not allowed", hostname: target.hostname });
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.status(200).send(diagnosticSvg("host"));
     return;
   }
 
   try {
-    let upstream = await fetchImage(target.toString(), false);
-    if (!upstream.ok) {
-      upstream = await fetchImage(target.toString(), true);
-    }
-
-    if (!upstream.ok || !upstream.body) {
-      res.status(upstream.status).json({
-        error: "Upstream avatar fetch failed",
-        status: upstream.status,
-      });
+    const attempt1 = await fetchImage(target.toString(), false);
+    if (attempt1.ok && attempt1.body) {
+      const contentType = attempt1.headers.get("content-type") || "image/png";
+      const buf = Buffer.from(await attempt1.arrayBuffer());
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+      res.status(200).send(buf);
       return;
     }
 
-    const contentType = upstream.headers.get("content-type") || "image/png";
-    const buf = Buffer.from(await upstream.arrayBuffer());
+    const status1 = attempt1.status;
+    const attempt2 = await fetchImage(target.toString(), true);
+    if (attempt2.ok && attempt2.body) {
+      const contentType = attempt2.headers.get("content-type") || "image/png";
+      const buf = Buffer.from(await attempt2.arrayBuffer());
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+      res.status(200).send(buf);
+      return;
+    }
 
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
-    res.status(200).send(buf);
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).send(diagnosticSvg(`${status1}/${attempt2.status}`));
   } catch (err) {
-    res.status(502).json({ error: "Failed to fetch avatar", detail: String(err) });
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).send(diagnosticSvg("err"));
   }
 }

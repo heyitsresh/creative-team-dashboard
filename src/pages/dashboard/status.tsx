@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid, KanbanSquare, List, Search, X } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, StatCard, Pill } from "@/components/ui/Card";
@@ -37,6 +37,21 @@ export default function StatusPage() {
   const [clientFilters, setClientFilters] = useState<string[]>([]);
   const [openOnly, setOpenOnly] = useState(false);
   const [showClientPicker, setShowClientPicker] = useState(false);
+  const clientPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close the Clients popover when clicking anywhere outside it — it used
+  // to only close by clicking its own toggle button again, which felt
+  // broken next to every other dropdown/menu on the page.
+  useEffect(() => {
+    if (!showClientPicker) return;
+    function onClickOutside(e: MouseEvent) {
+      if (clientPickerRef.current && !clientPickerRef.current.contains(e.target as Node)) {
+        setShowClientPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [showClientPicker]);
 
   function toggleClient(name: string) {
     setClientFilters((prev) =>
@@ -65,9 +80,12 @@ export default function StatusPage() {
     [tasks]
   );
   const clientOptions = useMemo(() => {
-    const counts = groupCount(tasks, (t) => t.client || "No client");
+    // Respects the "Open only" toggle so the parenthetical counts in the
+    // popover match what "Open only" would actually filter down to.
+    const base = openOnly ? tasks.filter(isOpen) : tasks;
+    const counts = groupCount(base, (t) => t.client || "No client");
     return counts.filter((c) => c.name !== "No client");
-  }, [tasks]);
+  }, [tasks, openOnly]);
 
   const filtersActive =
     search.trim() !== "" ||
@@ -116,7 +134,7 @@ export default function StatusPage() {
   return (
     <DashboardLayout>
       <PageHeader
-        title="Task status"
+        title="Jira Tasks"
         description="Where everything sits in the workflow right now."
         actions={
           <div className="flex items-center gap-1 bg-white border border-line rounded-pill p-1">
@@ -163,6 +181,24 @@ export default function StatusPage() {
 
       {view === "list" && (
         <Card>
+          <div className="flex flex-wrap items-center gap-1.5 mb-4">
+            {byStatus.map((s) => {
+              const active = statusFilter === s.name;
+              return (
+                <button
+                  key={s.name}
+                  onClick={() => setStatusFilter(active ? ALL : s.name)}
+                  className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-primary text-white"
+                      : "bg-paper text-ink/70 hover:bg-primary-light"
+                  }`}
+                >
+                  {s.name} <span className="opacity-70">{s.value}</span>
+                </button>
+              );
+            })}
+          </div>
           <div className="flex flex-wrap items-center gap-2.5 mb-5">
             <div className="relative flex-1 min-w-[180px]">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -209,7 +245,7 @@ export default function StatusPage() {
                 </option>
               ))}
             </select>
-            <div className="relative">
+            <div className="relative" ref={clientPickerRef}>
               <button
                 onClick={() => setShowClientPicker((v) => !v)}
                 className={`btn-press flex items-center gap-1.5 rounded-pill pl-3.5 pr-3 py-2 text-sm font-medium border transition-colors ${

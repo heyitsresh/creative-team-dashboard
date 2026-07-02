@@ -9,14 +9,23 @@ import { CountUp } from "@/components/ui/CountUp";
 import { TaskTable } from "@/components/shared/TaskTable";
 import { Avatar } from "@/components/ui/Avatar";
 import { BarList } from "@/components/charts/BarList";
-import { useTasks, useSlaRules, useTeamData } from "@/lib/useTasks";
-import { isOpen, isBreached, groupCount } from "@/lib/metrics";
+import { useTasks, useSlaRules, useTeamData, useClients } from "@/lib/useTasks";
+import { isOpen, isBreached, groupCount, taskMatchesMember } from "@/lib/metrics";
+import { PRIORITY_BUCKETS, priorityBucket, matchClientRecord } from "@/lib/priority";
 import { LoadingState } from "@/components/ui/LoadingState";
+
+const SECTION_STYLE: Record<string, string> = {
+  High: "bg-ink text-white",
+  Medium: "bg-tag-yellow-bg text-tag-yellow-text",
+  Low: "bg-paper text-ink/70",
+  Unranked: "bg-white border border-line text-muted",
+};
 
 export default function ClientHealthPage() {
   const { tasks, isLoading } = useTasks();
   const { rules } = useSlaRules();
   const { teams, members, isLoading: teamLoading } = useTeamData();
+  const { clients: brandClients, isLoading: brandLoading } = useClients();
   const [query, setQuery] = useState("");
   const [onlyOpen, setOnlyOpen] = useState(true);
   const router = useRouter();
@@ -75,7 +84,24 @@ export default function ClientHealthPage() {
       .sort((a, b) => b.open.length - a.open.length);
   }, [allClientNames, tasks, rules, query]);
 
-  if (isLoading || teamLoading) {
+  // Grouped into Brand Directory priority sections (High/Medium/Low, plus
+  // an "Unranked" bucket for Jira clients that don't loosely match any
+  // Brand Directory row yet) so the busiest/most-important brands read as
+  // their own visually distinct block instead of one flat undifferentiated
+  // grid.
+  const groupedClients = useMemo(() => {
+    const groups: Record<string, typeof clients> = { High: [], Medium: [], Low: [], Unranked: [] };
+    for (const c of clients) {
+      const record = matchClientRecord(c.client, brandClients);
+      const bucket = record ? priorityBucket(record.priority) : null;
+      groups[bucket ?? "Unranked"].push(c);
+    }
+    return [...PRIORITY_BUCKETS, "Unranked"]
+      .map((key) => ({ key, items: groups[key] }))
+      .filter((g) => g.items.length > 0);
+  }, [clients, brandClients]);
+
+  if (isLoading || teamLoading || brandLoading) {
     return (
       <DashboardLayout>
         <LoadingState label="Pulling from Jira…" />
@@ -102,11 +128,7 @@ export default function ClientHealthPage() {
     // this client yet is still "the designer for this client."
     const teamIdsWithWork = new Set(
       members
-        .filter((m) =>
-          clientTasks.some(
-            (t) => m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
-          )
-        )
+        .filter((m) => clientTasks.some((t) => taskMatchesMember(t, m)))
         .map((m) => m.team_id)
         .filter(Boolean)
     );
@@ -114,9 +136,7 @@ export default function ClientHealthPage() {
     const peopleOnClient = members
       .filter((m) => teamIdsWithWork.has(m.team_id))
       .map((m) => {
-        const mine = clientTasks.filter(
-          (t) => m.jira_email && t.assigneeEmail?.toLowerCase() === m.jira_email.toLowerCase()
-        );
+        const mine = clientTasks.filter((t) => taskMatchesMember(t, m));
         const openMine = mine.filter(isOpen);
         return {
           member: m,
@@ -304,45 +324,57 @@ export default function ClientHealthPage() {
         }
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
-        {clients.map((c) => (
-          <Link
-            key={c.client}
-            href={`/dashboard/health?client=${encodeURIComponent(c.client)}`}
-            className="block"
-          >
-            <Card className="h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-cardHover">
-              <div className="flex items-start justify-between mb-3 gap-2">
-                <h3 className="font-semibold text-sm leading-snug">{c.client}</h3>
-                {c.breached.length > 0 ? (
-                  <Pill tone="danger">{c.breached.length} overdue</Pill>
-                ) : (
-                  <Pill tone="success">Healthy</Pill>
-                )}
-              </div>
-              <div className="flex items-baseline gap-5 mb-3">
-                <div>
-                  <p className="text-2xl font-bold">
-                    <CountUp value={c.open.length} />
-                  </p>
-                  <p className="label-caps">Open</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-ink/70">
-                    <CountUp value={c.avgQueue} suffix="h" />
-                  </p>
-                  <p className="label-caps">Avg. queue</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {c.contentMix.slice(0, 4).map((m) => (
-                  <Pill key={m.name} colorKey={m.name}>
-                    {m.name} · {m.value}
-                  </Pill>
-                ))}
-              </div>
-            </Card>
-          </Link>
+      <div className="flex flex-col gap-8">
+        {groupedClients.map(({ key, items }) => (
+          <div key={key}>
+            <div
+              className={`inline-flex items-center gap-2 rounded-pill px-4 py-1.5 text-sm font-semibold mb-4 ${SECTION_STYLE[key]}`}
+            >
+              {key === "Unranked" ? "Not yet in Brand Directory" : `${key} priority`}
+              <span className="opacity-70 font-normal">({items.length})</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
+              {items.map((c) => (
+                <Link
+                  key={c.client}
+                  href={`/dashboard/health?client=${encodeURIComponent(c.client)}`}
+                  className="block"
+                >
+                  <Card className="h-full cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-cardHover">
+                    <div className="flex items-start justify-between mb-3 gap-2">
+                      <h3 className="font-semibold text-sm leading-snug">{c.client}</h3>
+                      {c.breached.length > 0 ? (
+                        <Pill tone="danger">{c.breached.length} overdue</Pill>
+                      ) : (
+                        <Pill tone="success">Healthy</Pill>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-5 mb-3">
+                      <div>
+                        <p className="text-2xl font-bold">
+                          <CountUp value={c.open.length} />
+                        </p>
+                        <p className="label-caps">Open</p>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-ink/70">
+                          <CountUp value={c.avgQueue} suffix="h" />
+                        </p>
+                        <p className="label-caps">Avg. queue</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.contentMix.slice(0, 4).map((m) => (
+                        <Pill key={m.name} colorKey={m.name}>
+                          {m.name} · {m.value}
+                        </Pill>
+                      ))}
+                    </div>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </div>
         ))}
         {clients.length === 0 && (
           <p className="text-sm text-muted">No clients match.</p>
