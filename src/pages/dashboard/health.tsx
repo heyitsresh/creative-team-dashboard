@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { CountUp } from "@/components/ui/CountUp";
 import { TaskTable } from "@/components/shared/TaskTable";
 import { Avatar } from "@/components/ui/Avatar";
+import { BarList } from "@/components/charts/BarList";
 import { useTasks, useSlaRules, useTeamData } from "@/lib/useTasks";
 import { isOpen, isBreached, groupCount } from "@/lib/metrics";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -44,6 +45,19 @@ export default function ClientHealthPage() {
     return allClientNames.find((c) => c.toLowerCase() === q) ?? null;
   }, [allClientNames, query]);
 
+  // Unfiltered, sorted-by-volume — feeds the pill-row switcher on the detail
+  // view so you can hop client to client without going back to the grid.
+  // (The `clients` list below is search-filtered, which would collapse to
+  // just one entry once `query` is pinned to an exact client name.)
+  const allClientsSummary = useMemo(() => {
+    return allClientNames
+      .map((client) => ({
+        client,
+        openCount: tasks.filter((t) => t.client === client && isOpen(t)).length,
+      }))
+      .sort((a, b) => b.openCount - a.openCount);
+  }, [allClientNames, tasks]);
+
   const clients = useMemo(() => {
     return allClientNames
       .map((client) => {
@@ -78,6 +92,8 @@ export default function ClientHealthPage() {
     const avgQueueDays = openTasks.length
       ? Math.round(openTasks.reduce((s, t) => s + t.hoursInQueue, 0) / openTasks.length / 24)
       : 0;
+    const byStatus = groupCount(openTasks, (t) => t.status);
+    const byAssignee = groupCount(openTasks, (t) => t.assigneeName || "Unassigned");
 
     // First figure out which team(s) actually have a ticket on this client
     // — then show that team's FULL roster (creative manager, listing
@@ -125,6 +141,26 @@ export default function ClientHealthPage() {
             </Link>
           }
         />
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-6 -mt-2">
+          {allClientsSummary.map((c) => {
+            const active = c.client === exactClient;
+            return (
+              <Link
+                key={c.client}
+                href={`/dashboard/health?client=${encodeURIComponent(c.client)}`}
+                className={`shrink-0 flex items-center gap-1.5 rounded-pill px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                  active
+                    ? "bg-primary text-white"
+                    : "bg-white border border-line text-ink/70 hover:bg-primary-light"
+                }`}
+              >
+                {c.client}
+                <span className={active ? "text-white/70" : "text-muted"}>({c.openCount})</span>
+              </Link>
+            );
+          })}
+        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 stagger">
           <StatCard
@@ -199,6 +235,27 @@ export default function ClientHealthPage() {
               ))}
             </div>
           </Card>
+        )}
+
+        {openTasks.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <Card>
+              <h2 className="font-semibold mb-4">By status</h2>
+              <BarList data={byStatus} />
+            </Card>
+            <Card>
+              <h2 className="font-semibold mb-4">By assignee</h2>
+              <BarList
+                data={byAssignee}
+                getHref={(d) => {
+                  const t = openTasks.find((x) => (x.assigneeName || "Unassigned") === d.name);
+                  return t?.assigneeEmail
+                    ? `/dashboard/queue?person=${encodeURIComponent(t.assigneeEmail)}`
+                    : "/dashboard/team";
+                }}
+              />
+            </Card>
+          </div>
         )}
 
         <Card>

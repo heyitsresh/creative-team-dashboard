@@ -1,5 +1,5 @@
 import useSWR from "swr";
-import type { NormalizedTask, Team, TeamMember, SlaRule } from "@/types";
+import type { NormalizedTask, Team, TeamMember, SlaRule, Client } from "@/types";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -42,6 +42,19 @@ export function useSlaRules() {
   );
   return {
     rules: data?.rules ?? [],
+    isLoading,
+    error,
+    refresh: () => mutate(),
+  };
+}
+
+export function useClients() {
+  const { data, error, isLoading, mutate } = useSWR<{ clients: Client[] }>(
+    "/api/clients",
+    fetcher
+  );
+  return {
+    clients: data?.clients ?? [],
     isLoading,
     error,
     refresh: () => mutate(),

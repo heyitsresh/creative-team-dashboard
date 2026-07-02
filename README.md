@@ -15,7 +15,20 @@ lessons learned from it (see "Design decisions" below).
 - **Alerts** — every open task that has breached its SLA, worst first, with an autosaving note field.
 - **Trends** — weekly created-vs-completed throughput and net backlog movement.
 - **Client Health** — one card per client: open count, avg. queue time, content mix.
+- **Brand Directory** — every brand from `Avenue7Media - Brand Directory.xlsx`, logos included. Team assignment and priority/category/website/notes all autosave here.
 - **Settings** — where you build the org chart and set SLA-hour budgets per content type. Every field autosaves (debounced), same pattern the Pendleton dashboard used for shared edits.
+
+## Redeploying after a code update
+
+Most updates to this repo (UI tweaks, new charts, bug fixes) are pure code —
+push to GitHub, Vercel auto-redeploys, and nothing else needs to change.
+**The one exception is the Brand Directory feature**: it added a new
+`clients` table, so before that page will work you need to open your
+Supabase project's SQL editor and re-run `supabase/schema.sql` once (it's
+safe to re-run in full — every statement is `if not exists` / `on conflict
+do nothing`, so it won't touch your existing teams, members, or SLA rules).
+After that one-time step, future code-only pushes go back to "just
+redeploy."
 
 ## Why Settings replaces "send me the roster/SLA sheet"
 

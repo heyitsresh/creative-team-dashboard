@@ -27,12 +27,22 @@ export default function StatusPage() {
 
   // List-view filters — a plain "our own Jira list view" instead of the
   // kanban, with the same toggles you'd reach for in Jira: search, status,
-  // content type, assignee, open-only.
+  // content type, assignee, open-only, and clients (multi-select, the way
+  // the old Pendleton dashboard's list view worked — pick as many brands as
+  // you need at once).
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [typeFilter, setTypeFilter] = useState(ALL);
   const [assigneeFilter, setAssigneeFilter] = useState(ALL);
+  const [clientFilters, setClientFilters] = useState<string[]>([]);
   const [openOnly, setOpenOnly] = useState(false);
+  const [showClientPicker, setShowClientPicker] = useState(false);
+
+  function toggleClient(name: string) {
+    setClientFilters((prev) =>
+      prev.includes(name) ? prev.filter((c) => c !== name) : [...prev, name]
+    );
+  }
 
   const byStatus = useMemo(() => groupCount(tasks, (t) => t.status), [tasks]);
   const byCategory = useMemo(
@@ -54,12 +64,17 @@ export default function StatusPage() {
       Array.from(new Set(tasks.map((t) => t.assigneeName).filter(Boolean) as string[])).sort(),
     [tasks]
   );
+  const clientOptions = useMemo(() => {
+    const counts = groupCount(tasks, (t) => t.client || "No client");
+    return counts.filter((c) => c.name !== "No client");
+  }, [tasks]);
 
   const filtersActive =
     search.trim() !== "" ||
     statusFilter !== ALL ||
     typeFilter !== ALL ||
     assigneeFilter !== ALL ||
+    clientFilters.length > 0 ||
     openOnly;
 
   const listRows = useMemo(() => {
@@ -69,19 +84,22 @@ export default function StatusPage() {
       if (statusFilter !== ALL && t.status !== statusFilter) return false;
       if (typeFilter !== ALL && t.contentType !== typeFilter) return false;
       if (assigneeFilter !== ALL && t.assigneeName !== assigneeFilter) return false;
+      if (clientFilters.length > 0 && !clientFilters.includes(t.client || "No client"))
+        return false;
       if (q) {
         const hay = `${t.key} ${t.summary} ${t.client || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [tasks, search, statusFilter, typeFilter, assigneeFilter, openOnly]);
+  }, [tasks, search, statusFilter, typeFilter, assigneeFilter, clientFilters, openOnly]);
 
   function clearFilters() {
     setSearch("");
     setStatusFilter(ALL);
     setTypeFilter(ALL);
     setAssigneeFilter(ALL);
+    setClientFilters([]);
     setOpenOnly(false);
   }
 
@@ -191,6 +209,41 @@ export default function StatusPage() {
                 </option>
               ))}
             </select>
+            <div className="relative">
+              <button
+                onClick={() => setShowClientPicker((v) => !v)}
+                className={`btn-press flex items-center gap-1.5 rounded-pill pl-3.5 pr-3 py-2 text-sm font-medium border transition-colors ${
+                  clientFilters.length > 0
+                    ? "bg-primary-light border-primary/30 text-primary-dark"
+                    : "bg-white border-line text-ink"
+                }`}
+              >
+                Clients{clientFilters.length > 0 ? ` (${clientFilters.length})` : ""}
+              </button>
+              {showClientPicker && (
+                <div className="absolute z-20 mt-2 w-80 max-h-72 overflow-y-auto bg-white border border-line rounded-2xl shadow-cardHover p-3">
+                  <p className="text-xs text-muted mb-2 px-1">Select as many as you need</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {clientOptions.map((c) => {
+                      const selected = clientFilters.includes(c.name);
+                      return (
+                        <button
+                          key={c.name}
+                          onClick={() => toggleClient(c.name)}
+                          className={`rounded-pill px-3 py-1.5 text-xs font-medium transition-colors ${
+                            selected
+                              ? "bg-primary text-white"
+                              : "bg-paper text-ink/70 hover:bg-primary-light"
+                          }`}
+                        >
+                          {c.name} ({c.value})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-sm text-muted bg-paper border border-line rounded-pill px-3 py-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -200,15 +253,41 @@ export default function StatusPage() {
               />
               Open only
             </label>
-            {filtersActive && (
+          </div>
+
+          {filtersActive && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-4 -mt-1">
+              <span className="text-xs text-muted mr-1">Filters:</span>
+              {search.trim() && (
+                <FilterChip label={`Search: "${search.trim()}"`} onRemove={() => setSearch("")} />
+              )}
+              {statusFilter !== ALL && (
+                <FilterChip
+                  label={`Status: ${statusFilter}`}
+                  onRemove={() => setStatusFilter(ALL)}
+                />
+              )}
+              {typeFilter !== ALL && (
+                <FilterChip label={`Type: ${typeFilter}`} onRemove={() => setTypeFilter(ALL)} />
+              )}
+              {assigneeFilter !== ALL && (
+                <FilterChip
+                  label={`Assignee: ${assigneeFilter}`}
+                  onRemove={() => setAssigneeFilter(ALL)}
+                />
+              )}
+              {clientFilters.map((c) => (
+                <FilterChip key={c} label={`Client: ${c}`} onRemove={() => toggleClient(c)} />
+              ))}
+              {openOnly && <FilterChip label="Open only" onRemove={() => setOpenOnly(false)} />}
               <button
                 onClick={clearFilters}
-                className="btn-press flex items-center gap-1.5 text-sm text-muted hover:text-tag-pink-text px-2 py-2 transition-colors"
+                className="text-xs text-muted hover:text-tag-pink-text underline transition-colors ml-1"
               >
-                <X size={14} /> Clear
+                Clear all
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           <p className="text-sm text-muted mb-3">
             {listRows.length} of {tasks.length} tasks
@@ -244,6 +323,21 @@ export default function StatusPage() {
         </>
       )}
     </DashboardLayout>
+  );
+}
+
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 bg-primary-light text-primary-dark text-xs font-medium rounded-pill pl-2.5 pr-1.5 py-1">
+      {label}
+      <button
+        onClick={onRemove}
+        className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+        aria-label={`Remove filter: ${label}`}
+      >
+        <X size={11} />
+      </button>
+    </span>
   );
 }
 

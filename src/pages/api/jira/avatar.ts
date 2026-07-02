@@ -12,20 +12,26 @@ function isAllowedHost(hostname: string) {
   );
 }
 
+async function fetchImage(target: string, useAuth: boolean) {
+  const headers: Record<string, string> = { Accept: "image/*" };
+  if (useAuth) headers.Authorization = authHeader();
+  return fetch(target, { headers });
+}
+
 /**
  * Proxies Jira avatar images through the server so the browser never needs
- * its own Jira session/credentials to render them. Without this, only
- * people with a custom-uploaded photo (served from Atlassian's public
- * avatar CDN, whatever its exact subdomain happens to be) would show a real
- * picture — everyone on Jira's default generated avatar (served from the
- * Jira site itself, which IS auth-gated) would 403 and silently fall back
- * to initials.
+ * its own Jira session/credentials to render them.
  *
- * Host matching is suffix-based (*.atlassian.net / *.atl-paas.net /
- * gravatar.com) rather than an exact-hostname allowlist — an earlier
- * version hardcoded one guessed CDN hostname, which rejected every photo
- * that didn't match it exactly (a regression: those photos loaded fine
- * before this proxy existed, since there was no allowlist at all then).
+ * Two earlier attempts at this still left most people on initials:
+ * (1) an exact-hostname allowlist that rejected CDN URLs that didn't match
+ * the one guessed hostname, and (2) always attaching our API-token auth
+ * header. It turns out Jira Cloud typically serves ALL avatars — default
+ * generated ones included — from its public avatar CDN, not from an
+ * auth-gated site endpoint; sending an unexpected Authorization header to
+ * a public CDN can get the request rejected outright. So: try the request
+ * unauthenticated first (right for the common case), and only fall back to
+ * our Jira credentials if that fails (right for the rarer case where an
+ * avatar genuinely is served from the auth-gated site itself).
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { url } = req.query;
@@ -43,25 +49,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (!isAllowedHost(target.hostname)) {
-    res.status(400).json({ error: "Host not allowed" });
+    res.status(400).json({ error: "Host not allowed", hostname: target.hostname });
     return;
   }
 
-  // Only the Jira site itself needs our API credentials — its default
-  // generated avatars live behind the same auth as the rest of the REST
-  // API. The avatar CDN and Gravatar are already public; attaching an
-  // unexpected Authorization header there could just as easily get the
-  // request rejected as help it.
-  const headers: Record<string, string> = { Accept: "image/*" };
-  if (target.hostname === SITE) {
-    headers.Authorization = authHeader();
-  }
-
   try {
-    const upstream = await fetch(target.toString(), { headers });
+    let upstream = await fetchImage(target.toString(), false);
+    if (!upstream.ok) {
+      upstream = await fetchImage(target.toString(), true);
+    }
 
     if (!upstream.ok || !upstream.body) {
-      res.status(upstream.status).end();
+      res.status(upstream.status).json({
+        error: "Upstream avatar fetch failed",
+        status: upstream.status,
+      });
       return;
     }
 
@@ -71,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
     res.status(200).send(buf);
-  } catch {
-    res.status(502).json({ error: "Failed to fetch avatar" });
+  } catch (err) {
+    res.status(502).json({ error: "Failed to fetch avatar", detail: String(err) });
   }
 }

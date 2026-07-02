@@ -9,6 +9,7 @@ import {
   BellRing,
   TrendingUp,
   HeartPulse,
+  BookImage,
   Settings as SettingsIcon,
   RefreshCw,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import type { Team, TeamMember } from "@/types";
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/dashboard/clients", label: "Clients & Content", icon: Users2 },
+  { href: "/dashboard/directory", label: "Brand Directory", icon: BookImage },
   { href: "/dashboard/team", label: "Team", icon: Network },
   { href: "/dashboard/status", label: "Status", icon: KanbanSquare },
   { href: "/dashboard/queue", label: "Queue vs SLA", icon: Clock4 },
@@ -37,8 +39,9 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex w-64 shrink-0 h-screen sticky top-0 flex-col bg-sidebar text-white">
       <div className="flex items-center gap-3 px-6 py-5 shrink-0">
-        <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center text-white text-sm font-bold shrink-0">
-          A7
+        <div className="h-9 w-14 rounded-lg bg-white flex items-center justify-center shrink-0 p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ave7-logo.svg" alt="Avenue7" className="h-full w-full object-contain" />
         </div>
         <div className="leading-tight min-w-0">
           <p className="font-semibold text-sm tracking-tight truncate">Avenue7Media</p>
@@ -80,7 +83,7 @@ export function Sidebar() {
                 return (
                   <Link
                     key={team.id}
-                    href="/dashboard/team"
+                    href={`/dashboard/team?team=${encodeURIComponent(team.id)}`}
                     className="flex items-center justify-between text-white/70 hover:text-white transition-colors"
                   >
                     <span className="text-xs truncate">{team.name}</span>

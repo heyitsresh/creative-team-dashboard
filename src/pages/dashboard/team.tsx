@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
 import { ListTodo, AlertTriangle, Users2, Clock } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatCard } from "@/components/ui/Card";
@@ -19,6 +20,17 @@ export default function TeamPage() {
   const { teams, members, isLoading: teamLoading } = useTeamData();
   const { rules, isLoading: rulesLoading } = useSlaRules();
   const [teamId, setTeamId] = useState<string>("all");
+  const router = useRouter();
+
+  // Sidebar's "Teams" list links here with ?team=<id> — land straight on
+  // that team instead of resetting to "All teams" (which, before this,
+  // made the by-person picker below default to whoever had the most
+  // overdue work company-wide, not on the team you actually clicked).
+  useEffect(() => {
+    if (!router.isReady) return;
+    const team = router.query.team;
+    if (typeof team === "string" && team) setTeamId(team);
+  }, [router.isReady, router.query.team]);
 
   const scopedMembers = useMemo(
     () => (teamId === "all" ? members : members.filter((m) => m.team_id === teamId)),

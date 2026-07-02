@@ -60,3 +60,15 @@ export interface TaskNote {
   updated_at: string;
   updated_by: string | null;
 }
+
+export interface Client {
+  id: string;
+  team_id: string | null;
+  name: string;
+  priority: string | null;
+  priority_note: string | null;
+  category: string | null;
+  website: string | null;
+  logo_path: string | null;
+  sort_order: number;
+}

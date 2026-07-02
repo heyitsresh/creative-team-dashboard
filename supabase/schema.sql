@@ -78,6 +78,32 @@ create table if not exists task_notes (
 );
 
 -- ---------------------------------------------------------------------------
+-- Brand Directory: one row per client/brand, sourced from "Avenue7Media -
+-- Brand Directory.xlsx". A brand can appear under more than one team (e.g.
+-- Pendleton runs on both Resh's and Musa's teams), so this is NOT unique on
+-- name alone — (team_id, name) is the natural key. Editable in-app on the
+-- Brand Directory page (team assignment + priority note/category/website
+-- autosave, same pattern as Team Setup); logos ship as static files under
+-- public/logos and are referenced by relative path here.
+-- ---------------------------------------------------------------------------
+create table if not exists clients (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid references teams(id) on delete set null,
+  name text not null,
+  priority text,
+  priority_note text,
+  category text,
+  website text,
+  logo_path text,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (team_id, name)
+);
+
+create index if not exists clients_team_id_idx on clients(team_id);
+
+-- ---------------------------------------------------------------------------
 -- updated_at triggers
 -- ---------------------------------------------------------------------------
 create or replace function set_updated_at() returns trigger as $$
@@ -99,6 +125,10 @@ drop trigger if exists task_notes_set_updated_at on task_notes;
 create trigger task_notes_set_updated_at before update on task_notes
   for each row execute procedure set_updated_at();
 
+drop trigger if exists clients_set_updated_at on clients;
+create trigger clients_set_updated_at before update on clients
+  for each row execute procedure set_updated_at();
+
 -- ---------------------------------------------------------------------------
 -- Row Level Security — any signed-in @avenue7media.com user can read/write.
 -- Service-role key (used in API routes) bypasses RLS entirely.
@@ -107,6 +137,7 @@ alter table teams enable row level security;
 alter table team_members enable row level security;
 alter table sla_rules enable row level security;
 alter table task_notes enable row level security;
+alter table clients enable row level security;
 
 create policy "avenue7 read teams" on teams for select using (is_avenue7_user());
 create policy "avenue7 write teams" on teams for all using (is_avenue7_user()) with check (is_avenue7_user());
@@ -119,6 +150,9 @@ create policy "avenue7 write sla_rules" on sla_rules for all using (is_avenue7_u
 
 create policy "avenue7 read task_notes" on task_notes for select using (is_avenue7_user());
 create policy "avenue7 write task_notes" on task_notes for all using (is_avenue7_user()) with check (is_avenue7_user());
+
+create policy "avenue7 read clients" on clients for select using (is_avenue7_user());
+create policy "avenue7 write clients" on clients for all using (is_avenue7_user()) with check (is_avenue7_user());
 
 -- ---------------------------------------------------------------------------
 -- SLA rules seeded from "Standardized Time Logging - Descriptions.xlsx"
@@ -231,3 +265,59 @@ update team_members set name = 'Muhammad Zulqairnain', jira_email = 'mzulqairnai
 -- ochavez@avenue7media.com) rather than running this script again.
 update team_members set jira_email = 'ochavez@avenue7media.com' where name = 'Odessa Chavez' and jira_email is null;
 update team_members set name = 'Odessa Chavez', jira_email = 'ochavez@avenue7media.com' where name = 'Odessa' and jira_email is null;
+-- ---------------------------------------------------------------------------
+-- Brand Directory seeded from "Avenue7Media - Brand Directory.xlsx" (one
+-- column per client, grouped by Creative Manager tab = team here). Logos
+-- were extracted from the sheet's embedded images and ship under
+-- public/logos — file names follow {team}-{slugified-brand}.{ext}. Brands
+-- with no logo in the sheet (e.g. Oak & Antler) get a null logo_path and
+-- fall back to initials in the UI. Re-running this file is safe: the
+-- (team_id, name) unique constraint + ON CONFLICT DO NOTHING skip rows
+-- that already exist, so edits made in the Brand Directory page survive a
+-- re-run of this script.
+-- ---------------------------------------------------------------------------
+insert into clients (team_id, name, priority, priority_note, category, website, logo_path, sort_order)
+values
+  ((select id from teams where name = 'Resh' limit 1), 'David''s Bridal', 'HIGH PRIORITY', 'P1 - Largest catalog, biggest GT priority', 'Apparel', 'https://www.davidsbridal.com/', '/logos/resh-david-s-bridal.png', 0),
+  ((select id from teams where name = 'Resh' limit 1), 'VoiceGift', 'HIGH PRIORITY', 'High priority — creative refresh timing is delicate', 'Electronic Devices, Audio Learning Devices', 'https://voice.gift/', '/logos/resh-voicegift.png', 1),
+  ((select id from teams where name = 'Resh' limit 1), 'My Protect Kit', 'HIGH PRIORITY', 'High priority — new onboard with active launches', 'Toiletry Kits', NULL, '/logos/resh-my-protect-kit.png', 2),
+  ((select id from teams where name = 'Resh' limit 1), 'Pendleton', 'HIGH PRIORITY', 'P1 - Largest catalog, biggest GT priority', 'Apparel', 'https://www.pendleton-usa.com/', '/logos/resh-pendleton.png', 3),
+  ((select id from teams where name = 'Resh' limit 1), 'Co2Lift', 'MED PRIORITY', 'Low-Med priority — brand refresh in flight', 'Skincare', 'https://co2lift.com/', '/logos/resh-co2lift.png', 4),
+  ((select id from teams where name = 'Resh' limit 1), 'Berri Organics', 'MED PRIORITY', 'New client - on going creative updates', 'Sports Drinks', 'https://berriorganics.com', '/logos/resh-berri-organics.png', 5),
+  ((select id from teams where name = 'Resh' limit 1), 'Byer of Maine', 'LOW / MAINTENANCE', 'Maintenance client', 'Camping, Birding and Pet', 'https://byerofmaine.com/', '/logos/resh-byer-of-maine.png', 6),
+  ((select id from teams where name = 'Resh' limit 1), 'LMDC (La Maison du Chocolat)', 'LOW / MAINTENANCE', 'Maintenance client — different model', 'Luxury Chocolates', 'https://www.lamaisonduchocolat.com/', '/logos/resh-lmdc-la-maison-du-chocolat.png', 7),
+  ((select id from teams where name = 'Resh' limit 1), 'Studio Eclipse', 'LOW / MAINTENANCE', 'Maintenance client', 'Knitting', 'https://www.amazon.com/stores/ArtsigaCrafts/page/4F7BBEE8-6400-4B94-B8CB-6A64212768E3', '/logos/resh-studio-eclipse.png', 8),
+  ((select id from teams where name = 'Yain' limit 1), 'DIAMOND WIPES', 'HIGH', 'Highest priority due to Catalog size and RS', 'Wipes', 'https://www.diamondwipes.com/ 
+https://diamondwipesb2b.com/ 
+https://lafreshgroup.com/', '/logos/yain-diamond-wipes.png', 9),
+  ((select id from teams where name = 'Yain' limit 1), 'BLUE FORCE GEAR', 'HIGH', 'New Launches Incoming', 'Slings, Hunting Gear, Apparel', 'https://blueforcegear.com/', '/logos/yain-blue-force-gear.png', 10),
+  ((select id from teams where name = 'Yain' limit 1), 'IPC EAGLE', 'HIGH', 'Newly-onboarded, ongoing optimizations', 'Scrubbers, Vacuums', 'https://www.ipcworldwide.com/us/', '/logos/yain-ipc-eagle.png', 11),
+  ((select id from teams where name = 'Yain' limit 1), 'VERMONT CHRISTMAS COMPANY (AD HOC)', 'HIGH', 'Ad-Hoc, contractual. Brand story is LIVE. 2 ASINs fully optimized. 1 ASIN ongoing uploads. 2 ASINs pending client review.', 'Puzzles', 'https://vermontchristmasco.com/', '/logos/yain-vermont-christmas-company-ad-hoc.jpg', 12),
+  ((select id from teams where name = 'Yain' limit 1), 'US AUTO SUPPLY', 'HIGH', 'Usually low-priority but with new launches incoming', NULL, 'https://www.usautosupply.com/', '/logos/yain-us-auto-supply.png', 13),
+  ((select id from teams where name = 'Yain' limit 1), 'GIFT LOT', 'MEDIUM', 'Low-priority products but has creative refresh ongoing', NULL, 'https://giftlot.com/', '/logos/yain-gift-lot.png', 14),
+  ((select id from teams where name = 'Yain' limit 1), 'VYKEE NUTRITION', 'MEDIUM', 'Last 2 ASINs in the Catalog optimization, then monitoring', 'Supplements', 'https://vykee.com/', '/logos/yain-vykee-nutrition.png', 15),
+  ((select id from teams where name = 'Yain' limit 1), 'BELLABOOTY', NULL, '3 SKUs only. Low priority unless refresh and/or event banners are needed', 'Hip Thrust Belts', 'https://bellabooty.com/', '/logos/yain-bellabooty.png', 16),
+  ((select id from teams where name = 'Yain' limit 1), 'HAVEN LIGHTING', NULL, 'Low priority except for new launches', 'Outdoor Lighting', 'https://shophaven.com/', '/logos/yain-haven-lighting.png', 17),
+  ((select id from teams where name = 'Yain' limit 1), 'VERMONT SMOKE & CURE', NULL, 'SEO keyword updates and monitoring only', 'Meat Sticks', 'https://store.vermontsmokeandcure.com/', '/logos/yain-vermont-smoke-cure.png', 18),
+  ((select id from teams where name = 'Yain' limit 1), 'NOVANTA', 'HIGH', 'Newly-onboarded, ongoing optimizations
+
+***Ad-hoc Ads and Creatives prepaid:
+4 ASINs Brand Store', 'Scanners, Spectroradiometer, PoE Ethernet Testers', 'https://novanta.com/', '/logos/yain-novanta.png', 19),
+  ((select id from teams where name = 'Noor' limit 1), 'Major Rugby', 'HIGH PRIORITY', 'P1 - biggest company priority', 'OTC Supplements', 'https://www.major-rugby.com', '/logos/noor-major-rugby.png', 20),
+  ((select id from teams where name = 'Noor' limit 1), 'Ohdoki', 'HIGH PRIORITY', 'High priority - creative refreshes, critical category', 'Adult Toys', 'https://www.thehandy.com', '/logos/noor-ohdoki.png', 21),
+  ((select id from teams where name = 'Noor' limit 1), 'Berri Organics', 'MED PRIORITY', 'New client - on going creative updates', 'Sports Drinks', 'https://berriorganics.com', '/logos/noor-berri-organics.png', 22),
+  ((select id from teams where name = 'Noor' limit 1), 'Alpha Tech Pet (ATP)', 'LOW/MAINTENANCE', 'Maintenance client', 'Pet Care', 'https://www.alphatechpet.com', '/logos/noor-alpha-tech-pet-atp.png', 23),
+  ((select id from teams where name = 'Noor' limit 1), 'SilcSkin', 'LOW/MAINTENANCE', 'Maintenance client', 'Skin Care', 'https://silcskin.com', '/logos/noor-silcskin.png', 24),
+  ((select id from teams where name = 'Noor' limit 1), 'Vyper', 'LOW/MAINTENANCE', 'Maintenance client', 'Tool & Equipment', 'https://www.vyperindustrial.com', '/logos/noor-vyper.png', 25),
+  ((select id from teams where name = 'Noor' limit 1), 'Petra Automotive', 'LOW/MAINTENANCE', 'Maintenance client', 'Automotive', 'https://petraautoproducts.com', '/logos/noor-petra-automotive.png', 26),
+  ((select id from teams where name = 'Musa' limit 1), 'Pendleton', 'HIGH PRIORITY', 'P1 - Largest catalog, biggest GT priority', 'Apparel', 'https://www.pendleton-usa.com/', '/logos/musa-pendleton.png', 27),
+  ((select id from teams where name = 'Musa' limit 1), 'Burt''s Bees Baby', 'HIGH PRIORITY', 'P1 - Largest catalog, biggest GT priority', 'Apparel', 'https://burtsbeesbaby.com/', '/logos/musa-burt-s-bees-baby.png', 28),
+  ((select id from teams where name = 'Musa' limit 1), 'Hollister', 'HIGH/MED PRIORITY', '1 to 2 ASINs per Month', 'Medical Supplies / Healthcare Products', 'https://www.hollister.com/', '/logos/musa-hollister.png', 29),
+  ((select id from teams where name = 'Musa' limit 1), 'Dormeo', 'HIGH/MED PRIORITY', 'Brand refresh in flight & New Launches/Marketplaces', 'Sleep and Bedding', 'https://www.dormeousa.com/', '/logos/musa-dormeo.png', 30),
+  ((select id from teams where name = 'Musa' limit 1), 'Festina', 'MED PRIORITY', 'Brand refresh & New launches', 'Watches', 'https://festinawatches.com/', '/logos/musa-festina.png', 31),
+  ((select id from teams where name = 'Musa' limit 1), 'Poppy Playtime / BDA', 'MED PRIORITY', 'New launches', 'gaming merchandise / entertainment merchandise', 'https://playtimeco.store/', '/logos/musa-poppy-playtime-bda.png', 32),
+  ((select id from teams where name = 'Musa' limit 1), 'Portable Winch', 'LOW PRIORITY', 'Bundle Listing Creation', 'Winches & Accessories', 'https://www.portablewinch.com/', '/logos/musa-portable-winch.png', 33),
+  ((select id from teams where name = 'Musa' limit 1), 'Office Goods', 'LOW PRIORITY', 'Listing Re-ops', 'Office Supplies & Desk Accessories', 'https://officegoods.com/', '/logos/musa-office-goods.png', 34),
+  ((select id from teams where name = 'Musa' limit 1), 'Dig Defense', 'LOW PRIORITY', 'Bundle Listing Creation / Re-Ops', 'Pet Safety & Outdoor Animal Control', 'https://digdefence.com/', '/logos/musa-dig-defense.png', 35),
+  ((select id from teams where name = 'Noor' limit 1), 'Oak & Antler', 'MED PRIORITY', 'New client - on going onboarding', 'Mixed Spices & Seasoning', 'https://oakandantler.com', NULL, 36)
+on conflict (team_id, name) do nothing;
