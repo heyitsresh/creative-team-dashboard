@@ -202,11 +202,20 @@ export default function QueuePage() {
                   <span className="whitespace-nowrap text-muted">
                     {Math.round(estimatedHours)}h / {weeklyCapacity}h ({taskCount})
                   </span>
-                  {/* Overdue shown as a filled bar out of this person's total
-                      open tasks — not just a bare count — so you can see at
-                      a glance what fraction of someone's queue is overdue,
-                      not just an absolute number floating with no scale. */}
-                  <span className="w-28 flex items-center gap-1.5 shrink-0">
+                  {/* Overdue shown as both a bare-count callout (skimmable
+                      at a glance, matching the team-wide pill above) and a
+                      filled bar out of this person's total open tasks (so
+                      you can see what fraction of their queue is overdue,
+                      not just an absolute number floating with no scale). */}
+                  <span
+                    className={`w-20 shrink-0 text-center rounded-pill py-1 text-[11px] font-semibold whitespace-nowrap ${
+                      overdueCount > 0 ? "bg-red-800 text-white" : "bg-paper text-muted"
+                    }`}
+                    title={`${overdueCount} of ${taskCount} open tasks overdue`}
+                  >
+                    {overdueCount} overdue
+                  </span>
+                  <span className="w-16 flex items-center shrink-0">
                     <span className="flex-1 h-1.5 bg-tag-pink-bg rounded-full overflow-hidden">
                       {overdueCount > 0 && (
                         <span
@@ -214,13 +223,6 @@ export default function QueuePage() {
                           style={{ width: `${Math.max(overduePct, 6)}%` }}
                         />
                       )}
-                    </span>
-                    <span
-                      className={`text-[10px] font-semibold whitespace-nowrap ${
-                        overdueCount > 0 ? "text-tag-pink-text" : "text-muted"
-                      }`}
-                    >
-                      {overdueCount}/{taskCount}
                     </span>
                   </span>
                 </Link>

@@ -32,7 +32,6 @@ export default function StatusPage() {
   // you need at once).
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(ALL);
-  const [typeFilter, setTypeFilter] = useState(ALL);
   const [assigneeFilter, setAssigneeFilter] = useState(ALL);
   const [clientFilters, setClientFilters] = useState<string[]>([]);
   const [openOnly, setOpenOnly] = useState(false);
@@ -66,10 +65,6 @@ export default function StatusPage() {
   );
   const byProject = useMemo(() => groupCount(tasks, (t) => t.projectKey), [tasks]);
 
-  const typeOptions = useMemo(
-    () => Array.from(new Set(tasks.map((t) => t.contentType))).sort(),
-    [tasks]
-  );
   const assigneeOptions = useMemo(
     () =>
       Array.from(new Set(tasks.map((t) => t.assigneeName).filter(Boolean) as string[])).sort(),
@@ -86,7 +81,6 @@ export default function StatusPage() {
   const filtersActive =
     search.trim() !== "" ||
     statusFilter !== ALL ||
-    typeFilter !== ALL ||
     assigneeFilter !== ALL ||
     clientFilters.length > 0 ||
     openOnly;
@@ -96,7 +90,6 @@ export default function StatusPage() {
     return tasks.filter((t) => {
       if (openOnly && !isOpen(t)) return false;
       if (statusFilter !== ALL && t.status !== statusFilter) return false;
-      if (typeFilter !== ALL && t.contentType !== typeFilter) return false;
       if (assigneeFilter !== ALL && t.assigneeName !== assigneeFilter) return false;
       if (clientFilters.length > 0 && !clientFilters.includes(t.client || "No client"))
         return false;
@@ -106,12 +99,11 @@ export default function StatusPage() {
       }
       return true;
     });
-  }, [tasks, search, statusFilter, typeFilter, assigneeFilter, clientFilters, openOnly]);
+  }, [tasks, search, statusFilter, assigneeFilter, clientFilters, openOnly]);
 
   function clearFilters() {
     setSearch("");
     setStatusFilter(ALL);
-    setTypeFilter(ALL);
     setAssigneeFilter(ALL);
     setClientFilters([]);
     setOpenOnly(false);
@@ -216,18 +208,6 @@ export default function StatusPage() {
               />
             </div>
             <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="border border-line rounded-pill pl-3.5 pr-8 py-2 text-sm bg-white font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition cursor-pointer"
-            >
-              <option value={ALL}>All content types</option>
-              {typeOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-            <select
               value={assigneeFilter}
               onChange={(e) => setAssigneeFilter(e.target.value)}
               className="border border-line rounded-pill pl-3.5 pr-8 py-2 text-sm bg-white font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition cursor-pointer"
@@ -296,9 +276,6 @@ export default function StatusPage() {
                   label={`Status: ${statusFilter}`}
                   onRemove={() => setStatusFilter(ALL)}
                 />
-              )}
-              {typeFilter !== ALL && (
-                <FilterChip label={`Type: ${typeFilter}`} onRemove={() => setTypeFilter(ALL)} />
               )}
               {assigneeFilter !== ALL && (
                 <FilterChip

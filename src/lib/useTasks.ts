@@ -106,5 +106,20 @@ export function useAsinOverrides() {
     isLoading,
     error,
     refresh: () => mutate(),
+    // Merges rows into the local cache immediately (no waiting on a network
+    // round trip) and then reconciles with the server in the background —
+    // without this, a save can take a moment to show up anywhere that
+    // reads this hook (e.g. the By Product sidebar list) because plain
+    // revalidation isn't guaranteed to land before the next render.
+    applyOverrides: (rows: AsinOverride[]) =>
+      mutate(
+        (current) => {
+          const others = (current?.overrides ?? []).filter(
+            (o) => !rows.some((r) => r.issue_key === o.issue_key)
+          );
+          return { overrides: [...others, ...rows] };
+        },
+        { revalidate: true }
+      ),
   };
 }

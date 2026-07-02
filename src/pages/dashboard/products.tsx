@@ -9,22 +9,30 @@ import { useTasks, useAsinOverrides } from "@/lib/useTasks";
 import { isOpen, groupCount } from "@/lib/metrics";
 import { statusDotColor } from "@/lib/taskDisplay";
 import { extractAsin } from "@/lib/asin";
-import { useAutosave } from "@/lib/useAutosave";
 import type { NormalizedTask } from "@/types";
 
 const NO_ASIN = "No ASIN Detected";
 
 export default function ByProductPage() {
   const { tasks, isLoading } = useTasks();
-  const { overrides, refresh: refreshOverrides } = useAsinOverrides();
+  const { overrides, applyOverrides } = useAsinOverrides();
   const [search, setSearch] = useState("");
   const [asinSearch, setAsinSearch] = useState("");
   const [selectedAsin, setSelectedAsin] = useState<string | null>(null);
   const [clientFilters, setClientFilters] = useState<string[]>([]);
-  const { save: saveOverride } = useAutosave<{ issue_key: string; asin: string }>(
-    "/api/asin-overrides",
-    { delayMs: 500 }
-  );
+
+  // Saves one task's tag: hits the API, then merges the result straight
+  // into the shared overrides cache so every reader of that cache (this
+  // page's own sidebar list, the group header, anything else on the page)
+  // reflects it immediately instead of waiting on a background refetch.
+  async function saveTaskAsin(issue_key: string, asin: string) {
+    await fetch("/api/asin-overrides", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ issue_key, asin }),
+    });
+    applyOverrides([{ issue_key, asin, updated_at: new Date().toISOString() }]);
+  }
 
   const overrideMap = useMemo(
     () => new Map(overrides.map((o) => [o.issue_key, o.asin])),
@@ -119,7 +127,8 @@ export default function ByProductPage() {
           items: selected.tasks.map((t) => ({ issue_key: t.key, asin: newAsin })),
         }),
       });
-      await refreshOverrides();
+      const now = new Date().toISOString();
+      applyOverrides(selected.tasks.map((t) => ({ issue_key: t.key, asin: newAsin, updated_at: now })));
       setSelectedAsin(newAsin);
       setRenamingGroup(false);
     } finally {
@@ -318,7 +327,7 @@ export default function ByProductPage() {
               </thead>
               <tbody>
                 {selectedRows.map((t) => (
-                  <ProductRow key={t.key} task={t} onSaved={refreshOverrides} save={saveOverride} />
+                  <ProductRow key={t.key} task={t} onSave={saveTaskAsin} />
                 ))}
                 {selectedRows.length === 0 && (
                   <tr>
@@ -338,15 +347,14 @@ export default function ByProductPage() {
 
 function ProductRow({
   task,
-  save,
-  onSaved,
+  onSave,
 }: {
   task: NormalizedTask;
-  save: (payload: { issue_key: string; asin: string }) => void;
-  onSaved: () => void;
+  onSave: (issue_key: string, asin: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(extractAsin(task.summary) ?? "");
+  const [saving, setSaving] = useState(false);
 
   return (
     <tr className="border-b border-line/60 hover:bg-paper/60 transition-colors">
@@ -377,15 +385,24 @@ function ProductRow({
           <input
             autoFocus
             value={value}
+            disabled={saving}
             onChange={(e) => setValue(e.target.value.toUpperCase())}
-            onBlur={() => {
+            onBlur={async () => {
+              const next = value.trim();
               setEditing(false);
-              if (value.trim()) {
-                save({ issue_key: task.key, asin: value.trim() });
-                setTimeout(onSaved, 700);
+              if (next) {
+                setSaving(true);
+                try {
+                  await onSave(task.key, next);
+                } finally {
+                  setSaving(false);
+                }
               }
             }}
-            className="border border-line rounded-lg px-2 py-1 text-xs font-mono bg-white w-32 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+            className="border border-line rounded-lg px-2 py-1 text-xs font-mono bg-white w-32 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition disabled:opacity-50"
           />
         ) : (
           <button
